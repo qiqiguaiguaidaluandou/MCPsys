@@ -93,12 +93,7 @@ class TelemetryWriter:
         return batch
 
     async def _flush(self, batch: list[CallLogEntry]) -> None:
-        rows = []
-        for e in batch:
-            data = asdict(e)
-            # asdict converts CallStatus enum to its value; restore for ORM
-            data["status"] = e.status
-            rows.append(CallLog(**data))
+        rows = [CallLog(**asdict(e)) for e in batch]
         try:
             async with self._sf() as session:
                 session.add_all(rows)

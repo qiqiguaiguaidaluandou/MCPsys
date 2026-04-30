@@ -68,6 +68,13 @@ async def validate_api_key(
         # Constant-time compare against a SHA-256 of the plaintext (cache holds the digest,
         # not bcrypt) so the hot path is microseconds, not ~250ms of bcrypt per request.
         if hmac.compare_digest(_plaintext_digest(plaintext), data["digest"]):
+            # Honor expiration even on cache hit so cache TTL is not the upper bound on
+            # both expiration AND revocation latency. Revocation still has the cache-TTL lag.
+            exp_iso = data.get("expires_at")
+            if exp_iso is not None:
+                exp = datetime.fromisoformat(exp_iso)
+                if exp < datetime.now(UTC):
+                    raise AuthError("expired key (cached)")
             return ResolvedKey(
                 api_key_id=data["api_key_id"],
                 application_id=data.get("application_id"),
@@ -105,8 +112,16 @@ async def validate_api_key(
         "digest": _plaintext_digest(plaintext),
         "application_id": application_id,
         "user_id": user_id,
+        "expires_at": matched.expires_at.isoformat() if matched.expires_at else None,
     }
-    await redis.setex(ck, ttl_seconds, json.dumps(payload))
+    # If the key expires within the normal TTL window, shorten the cache lifetime so the
+    # entry naturally falls off near expiry — the on-hit check above is the safety net.
+    effective_ttl = ttl_seconds
+    if matched.expires_at is not None:
+        until_expiry = int((matched.expires_at - datetime.now(UTC)).total_seconds())
+        if 0 < until_expiry < ttl_seconds:
+            effective_ttl = until_expiry
+    await redis.setex(ck, max(effective_ttl, 1), json.dumps(payload))
 
     return ResolvedKey(
         api_key_id=matched.id,
