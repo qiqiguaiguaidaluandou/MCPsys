@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from mcpsys_shared.db import make_engine, make_session_factory
 
 from .routers import (
+    api_keys as api_keys_router,
     applications as applications_router,
     auth as auth_router,
     services as services_router,
@@ -26,6 +27,7 @@ app.include_router(auth_router.router)
 app.include_router(users_router.router)
 app.include_router(applications_router.router)
 app.include_router(services_router.router)
+app.include_router(api_keys_router.router)
 
 
 @app.get("/healthz")
