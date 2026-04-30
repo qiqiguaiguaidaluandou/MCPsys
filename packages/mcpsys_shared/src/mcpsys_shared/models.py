@@ -3,7 +3,6 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
-    JSON,
     BigInteger,
     Boolean,
     DateTime,
@@ -16,8 +15,8 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 class Base(DeclarativeBase):
@@ -97,6 +96,7 @@ class Application(Base):
 
 class ApiKey(Base):
     __tablename__ = "api_keys"
+    __table_args__ = (Index("ix_api_keys_owner", "owner_type", "owner_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     key_prefix: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
@@ -104,7 +104,7 @@ class ApiKey(Base):
     owner_type: Mapped[ApiKeyOwnerType] = mapped_column(Enum(ApiKeyOwnerType), nullable=False)
     owner_id: Mapped[int] = mapped_column(Integer, nullable=False)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
-    scopes: Mapped[dict] = mapped_column(JSON, default=dict)
+    scopes: Mapped[dict] = mapped_column(JSONB, default=dict)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -121,7 +121,7 @@ class McpService(Base):
     display_name: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     owner_team: Mapped[str | None] = mapped_column(String(128))
-    tags: Mapped[list] = mapped_column(JSON, default=list)
+    tags: Mapped[list] = mapped_column(JSONB, default=list)
     endpoint_url: Mapped[str] = mapped_column(String(512), nullable=False)
     transport: Mapped[TransportType] = mapped_column(
         Enum(TransportType), default=TransportType.streamable_http
@@ -149,7 +149,7 @@ class McpServiceVersion(Base):
     service_id: Mapped[int] = mapped_column(ForeignKey("mcp_services.id"), nullable=False)
     version: Mapped[str] = mapped_column(String(32), nullable=False)
     endpoint_url: Mapped[str] = mapped_column(String(512), nullable=False)
-    manifest: Mapped[dict] = mapped_column(JSON, default=dict)
+    manifest: Mapped[dict] = mapped_column(JSONB, default=dict)
     is_current: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -158,7 +158,11 @@ class McpServiceVersion(Base):
 
 
 class CallLog(Base):
-    """Per-request log written by the gateway. Body fields are nulled after 30 days."""
+    """Per-request log written by the gateway. Body fields are nulled after 30 days.
+
+    No FKs on caller/service columns: this is a high-volume append-only log that must
+    survive deletion of the referenced entities and avoid cascade-on-write cost.
+    """
 
     __tablename__ = "call_logs"
     __table_args__ = (
@@ -202,6 +206,6 @@ class AuditEvent(Base):
     action: Mapped[str] = mapped_column(String(64), nullable=False)
     target_type: Mapped[str] = mapped_column(String(64), nullable=False)
     target_id: Mapped[str | None] = mapped_column(String(64))
-    before: Mapped[dict | None] = mapped_column(JSON)
-    after: Mapped[dict | None] = mapped_column(JSON)
+    before: Mapped[dict | None] = mapped_column(JSONB)
+    after: Mapped[dict | None] = mapped_column(JSONB)
     ip: Mapped[str | None] = mapped_column(String(64))
