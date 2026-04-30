@@ -92,7 +92,7 @@ async def test_update_service_endpoint(client, admin):
     assert body["status"] == "disabled"
 
 
-async def test_delete_service(client, admin):
+async def test_delete_service_soft_marks_disabled(client, admin):
     await client.post(
         "/api/v1/services",
         headers=auth_header(admin),
@@ -100,5 +100,7 @@ async def test_delete_service(client, admin):
     )
     resp = await client.delete("/api/v1/services/tmp", headers=auth_header(admin))
     assert resp.status_code == 204
+    # Soft-delete: row stays so call_logs history keeps its slug → name mapping.
     resp2 = await client.get("/api/v1/services/tmp", headers=auth_header(admin))
-    assert resp2.status_code == 404
+    assert resp2.status_code == 200
+    assert resp2.json()["status"] == "disabled"

@@ -18,6 +18,21 @@ from control_plane.settings import settings
 
 
 @pytest.fixture
+async def operator(session_factory):
+    async with session_factory() as s:
+        u = User(
+            username="logs-operator",
+            password_hash=hash_password("p"),
+            role=UserRole.operator,
+            status=UserStatus.active,
+        )
+        s.add(u)
+        await s.commit()
+        await s.refresh(u)
+        return u
+
+
+@pytest.fixture
 async def viewer(session_factory):
     async with session_factory() as s:
         u = User(
@@ -67,10 +82,10 @@ def auth_header(user):
     return {"Authorization": f"Bearer {token}"}
 
 
-async def test_list_logs(client, viewer, seeded_logs):
+async def test_list_logs(client, operator, seeded_logs):
     resp = await client.get(
         f"/api/v1/call-logs?service_id={seeded_logs}",
-        headers=auth_header(viewer),
+        headers=auth_header(operator),
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -78,21 +93,30 @@ async def test_list_logs(client, viewer, seeded_logs):
     assert len(body["items"]) == 5
 
 
-async def test_filter_by_status(client, viewer, seeded_logs):
+async def test_filter_by_status(client, operator, seeded_logs):
     resp = await client.get(
         f"/api/v1/call-logs?service_id={seeded_logs}&status=error",
-        headers=auth_header(viewer),
+        headers=auth_header(operator),
     )
     assert resp.status_code == 200
     body = resp.json()
     assert all(i["status"] == "error" for i in body["items"])
 
 
-async def test_pagination(client, viewer, seeded_logs):
+async def test_pagination(client, operator, seeded_logs):
     resp = await client.get(
         f"/api/v1/call-logs?service_id={seeded_logs}&limit=2",
-        headers=auth_header(viewer),
+        headers=auth_header(operator),
     )
     body = resp.json()
     assert len(body["items"]) == 2
     assert body["total"] == 5
+
+
+async def test_viewer_forbidden_on_call_logs(client, viewer, seeded_logs):
+    """Viewer must not access call_logs (request/response bodies may be sensitive across tenants)."""
+    resp = await client.get(
+        f"/api/v1/call-logs?service_id={seeded_logs}",
+        headers=auth_header(viewer),
+    )
+    assert resp.status_code == 403
