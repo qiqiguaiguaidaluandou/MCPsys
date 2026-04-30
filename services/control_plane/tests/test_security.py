@@ -1,3 +1,4 @@
+import jwt
 import pytest
 
 from control_plane.security import (
@@ -24,7 +25,7 @@ def test_jwt_round_trip():
 
 def test_jwt_expired_raises():
     token = encode_jwt({"sub": "alice"}, secret="s", expires_minutes=-1)
-    with pytest.raises(Exception):
+    with pytest.raises(jwt.ExpiredSignatureError):
         decode_jwt(token, secret="s")
 
 

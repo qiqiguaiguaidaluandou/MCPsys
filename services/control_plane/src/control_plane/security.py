@@ -28,7 +28,12 @@ def encode_jwt(claims: dict[str, Any], *, secret: str, expires_minutes: int) -> 
 
 
 def decode_jwt(token: str, *, secret: str) -> dict[str, Any]:
-    return jwt.decode(token, secret, algorithms=["HS256"])
+    return jwt.decode(
+        token,
+        secret,
+        algorithms=["HS256"],
+        options={"require": ["exp", "iat"]},
+    )
 
 
 def generate_api_key() -> tuple[str, str, str]:
