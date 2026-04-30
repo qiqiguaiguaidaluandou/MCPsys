@@ -9,8 +9,8 @@ Internal MCP (Model Context Protocol) service management system.
 
 ```bash
 cp .env.example .env
-# edit .env: set strong JWT_SECRET and CONFIG_FERNET_KEY (generate with:
-# python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+# edit .env: set a strong JWT_SECRET (>= 32 chars). Use:
+#   python -c "import secrets; print(secrets.token_urlsafe(48))"
 
 docker compose build
 docker compose up -d
@@ -47,3 +47,9 @@ uv run --package mcpsys-shared  pytest packages/mcpsys_shared/tests
 ## Architecture
 
 See `docs/specs/2026-04-30-mcp-management-system-design.md` §2 for the architecture diagram.
+
+## Operational notes
+
+- **TLS termination**: The bundled nginx listens on HTTP :80 only. Production deployments are expected to terminate TLS at a corporate edge (or an additional reverse proxy) upstream of this nginx. Add `listen 443 ssl;` to `nginx/nginx.conf` if you want this nginx to do termination directly.
+- **Scaling the gateway**: A single gateway replica is sufficient at MVP scale (≤100 QPS). Multi-replica scaling needs an nginx upstream block with a runtime DNS resolver (e.g. `resolver 127.0.0.11 valid=10s; set $upstream gateway:8080; proxy_pass http://$upstream;`) — deferred to v1.
+- **Backups**: Postgres `pg_dump` is not yet automated; deploy a host-level cron or sidecar in production.

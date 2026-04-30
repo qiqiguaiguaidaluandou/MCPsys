@@ -44,11 +44,8 @@ services:
       <<: *app-env
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_MINUTES: ${JWT_EXPIRES_MINUTES}
-      CONFIG_FERNET_KEY: ${CONFIG_FERNET_KEY}
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
@@ -69,8 +66,7 @@ services:
         condition: service_healthy
       control-plane:
         condition: service_healthy
-    deploy:
-      replicas: ${GATEWAY_REPLICAS}
+    # NOTE: scaling beyond 1 replica needs nginx upstream resolver tweak; deferred to v1.
 
   grafana:
     image: grafana/grafana:10.4.5

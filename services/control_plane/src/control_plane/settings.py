@@ -9,7 +9,6 @@ class ControlPlaneSettings(SharedSettings):
 
     jwt_secret: str = Field(default="dev-only-secret-change-me")
     jwt_expires_minutes: int = Field(default=60)
-    config_fernet_key: str | None = Field(default=None)
 
 
 settings = ControlPlaneSettings()
