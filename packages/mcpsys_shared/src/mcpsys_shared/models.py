@@ -14,6 +14,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -104,7 +105,9 @@ class ApiKey(Base):
     owner_type: Mapped[ApiKeyOwnerType] = mapped_column(Enum(ApiKeyOwnerType), nullable=False)
     owner_id: Mapped[int] = mapped_column(Integer, nullable=False)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
-    scopes: Mapped[dict] = mapped_column(JSONB, default=dict)
+    scopes: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -121,7 +124,9 @@ class McpService(Base):
     display_name: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     owner_team: Mapped[str | None] = mapped_column(String(128))
-    tags: Mapped[list] = mapped_column(JSONB, default=list)
+    tags: Mapped[list] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
     endpoint_url: Mapped[str] = mapped_column(String(512), nullable=False)
     transport: Mapped[TransportType] = mapped_column(
         Enum(TransportType), default=TransportType.streamable_http
@@ -149,7 +154,9 @@ class McpServiceVersion(Base):
     service_id: Mapped[int] = mapped_column(ForeignKey("mcp_services.id"), nullable=False)
     version: Mapped[str] = mapped_column(String(32), nullable=False)
     endpoint_url: Mapped[str] = mapped_column(String(512), nullable=False)
-    manifest: Mapped[dict] = mapped_column(JSONB, default=dict)
+    manifest: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
     is_current: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
