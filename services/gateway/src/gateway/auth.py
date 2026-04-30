@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -5,13 +7,14 @@ from datetime import UTC, datetime
 import bcrypt
 from redis.asyncio import Redis
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from mcpsys_shared.models import ApiKey, ApiKeyOwnerType
 
 CACHE_PREFIX = "gw:apikey:"
 NEGATIVE_TTL = 30  # cache "unknown" briefly to avoid hammering DB
 TAG = "mcpk_"
+PREFIX_LEN = 8
 
 
 class AuthError(Exception):
@@ -28,17 +31,29 @@ class ResolvedKey:
 def _extract_prefix(plaintext: str) -> str:
     if not plaintext.startswith(TAG):
         raise AuthError("malformed key")
-    return plaintext[len(TAG) : len(TAG) + 8]
+    return plaintext[len(TAG) : len(TAG) + PREFIX_LEN]
 
 
 def _cache_key(prefix: str) -> str:
     return f"{CACHE_PREFIX}{prefix}"
 
 
+def _plaintext_digest(plaintext: str) -> str:
+    return hashlib.sha256(plaintext.encode()).hexdigest()
+
+
+def _safe_checkpw(plaintext: str, hashed: str) -> bool:
+    """bcrypt.checkpw raises ValueError on a malformed/corrupt hash. Treat as no-match."""
+    try:
+        return bcrypt.checkpw(plaintext.encode(), hashed.encode())
+    except ValueError:
+        return False
+
+
 async def validate_api_key(
     plaintext: str,
     *,
-    session_factory: async_sessionmaker,
+    session_factory: async_sessionmaker[AsyncSession],
     redis: Redis,
     ttl_seconds: int = 60,
 ) -> ResolvedKey:
@@ -50,14 +65,15 @@ async def validate_api_key(
         data = json.loads(cached)
         if data.get("ok") is False:
             raise AuthError("unknown key (cached)")
-        # re-verify against the cached hash to ensure correct key matched (collision unlikely
-        # but plaintext may differ within same prefix bucket)
-        if bcrypt.checkpw(plaintext.encode(), data["hash"].encode()):
+        # Constant-time compare against a SHA-256 of the plaintext (cache holds the digest,
+        # not bcrypt) so the hot path is microseconds, not ~250ms of bcrypt per request.
+        if hmac.compare_digest(_plaintext_digest(plaintext), data["digest"]):
             return ResolvedKey(
                 api_key_id=data["api_key_id"],
                 application_id=data.get("application_id"),
                 user_id=data.get("user_id"),
             )
+        # Different plaintext within the same prefix bucket — fall through to DB.
 
     async with session_factory() as session:
         res = await session.execute(select(ApiKey).where(ApiKey.key_prefix == prefix))
@@ -65,7 +81,7 @@ async def validate_api_key(
 
     matched: ApiKey | None = None
     for k in candidates:
-        if bcrypt.checkpw(plaintext.encode(), k.key_hash.encode()):
+        if _safe_checkpw(plaintext, k.key_hash):
             matched = k
             break
 
@@ -78,19 +94,22 @@ async def validate_api_key(
     if matched.expires_at is not None and matched.expires_at < datetime.now(UTC):
         raise AuthError("expired key")
 
+    application_id = (
+        matched.owner_id if matched.owner_type == ApiKeyOwnerType.application else None
+    )
+    user_id = matched.owner_id if matched.owner_type == ApiKeyOwnerType.user else None
+
     payload = {
         "ok": True,
         "api_key_id": matched.id,
-        "hash": matched.key_hash,
-        "application_id": (
-            matched.owner_id if matched.owner_type == ApiKeyOwnerType.application else None
-        ),
-        "user_id": matched.owner_id if matched.owner_type == ApiKeyOwnerType.user else None,
+        "digest": _plaintext_digest(plaintext),
+        "application_id": application_id,
+        "user_id": user_id,
     }
     await redis.setex(ck, ttl_seconds, json.dumps(payload))
 
     return ResolvedKey(
         api_key_id=matched.id,
-        application_id=payload["application_id"],
-        user_id=payload["user_id"],
+        application_id=application_id,
+        user_id=user_id,
     )
