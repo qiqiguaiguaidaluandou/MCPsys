@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: mcpsys
+    folder: MCPsys
+    type: file
+    options:
+      path: /etc/grafana/provisioning/dashboards

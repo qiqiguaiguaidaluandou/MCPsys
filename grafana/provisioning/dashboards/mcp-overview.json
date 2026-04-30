@@ -1,0 +1,66 @@
+{
+  "title": "MCP Overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Total calls (24h)",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "mcpsys-postgres" },
+      "targets": [
+        {
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) AS value FROM call_logs WHERE ts > now() - interval '24 hours';"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Error rate (24h)",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "mcpsys-postgres" },
+      "fieldConfig": { "defaults": { "unit": "percentunit" } },
+      "targets": [
+        {
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT (count(*) FILTER (WHERE status != 'success'))::float / NULLIF(count(*),0) AS value FROM call_logs WHERE ts > now() - interval '24 hours';"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "barchart",
+      "title": "Top services by calls (24h)",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 5 },
+      "datasource": { "type": "postgres", "uid": "mcpsys-postgres" },
+      "targets": [
+        {
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT s.slug AS service, count(*) AS calls FROM call_logs c JOIN mcp_services s ON s.id = c.service_id WHERE c.ts > now() - interval '24 hours' GROUP BY s.slug ORDER BY calls DESC LIMIT 10;"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Calls per minute (24h)",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 14 },
+      "datasource": { "type": "postgres", "uid": "mcpsys-postgres" },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT date_trunc('minute', ts) AS time, count(*) AS calls FROM call_logs WHERE ts > now() - interval '24 hours' GROUP BY 1 ORDER BY 1;"
+        }
+      ]
+    }
+  ]
+}
