@@ -15,20 +15,25 @@ TOKEN=$(curl -fsS -X POST "$BASE/api/v1/auth/login" \
     | python -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 echo "got token: ${TOKEN:0:20}..."
 
-echo "[smoke] create application"
+echo "[smoke] create application (idempotent)"
 curl -fsS -X POST "$BASE/api/v1/applications" \
     -H "Authorization: Bearer $TOKEN" -H "content-type: application/json" \
     -d '{"name":"smoke-app"}' >/dev/null || true
 
-echo "[smoke] register service"
+# Look up smoke-app's id by name (works on fresh OR existing DB)
+APP_ID=$(curl -fsS "$BASE/api/v1/applications" -H "Authorization: Bearer $TOKEN" \
+    | python -c "import sys,json; apps=json.load(sys.stdin)['items']; print(next(a['id'] for a in apps if a['name']=='smoke-app'))")
+echo "smoke-app id: $APP_ID"
+
+echo "[smoke] register service (idempotent)"
 curl -fsS -X POST "$BASE/api/v1/services" \
     -H "Authorization: Bearer $TOKEN" -H "content-type: application/json" \
     -d '{"slug":"smoke-svc","display_name":"Smoke","endpoint_url":"http://httpbin.org/anything"}' >/dev/null || true
 
-echo "[smoke] issue api key"
+echo "[smoke] issue api key for app $APP_ID"
 APIKEY=$(curl -fsS -X POST "$BASE/api/v1/api-keys" \
     -H "Authorization: Bearer $TOKEN" -H "content-type: application/json" \
-    -d '{"name":"smoke","owner_type":"application","owner_id":1}' \
+    -d "{\"name\":\"smoke\",\"owner_type\":\"application\",\"owner_id\":$APP_ID}" \
     | python -c "import sys,json; print(json.load(sys.stdin)['plaintext'])")
 echo "got api key: ${APIKEY:0:12}..."
 
