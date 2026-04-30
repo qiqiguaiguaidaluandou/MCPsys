@@ -21,3 +21,4 @@ ignore = ["S101"]  # allow assert in tests
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 addopts = "-ra -q"
+testpaths = ["packages", "services"]
