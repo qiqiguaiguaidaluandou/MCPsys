@@ -94,6 +94,27 @@ def upgrade() -> None:
         sa.UniqueConstraint("slug", name="uq_mcp_services_slug"),
     )
 
+    # Trigger so updated_at bumps even if a row is updated outside the ORM
+    # (raw SQL maintenance, restored backups, etc.).
+    op.execute(
+        """
+        CREATE OR REPLACE FUNCTION mcp_services_set_updated_at()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            NEW.updated_at = now();
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+        """
+    )
+    op.execute(
+        """
+        CREATE TRIGGER mcp_services_updated_at_trigger
+        BEFORE UPDATE ON mcp_services
+        FOR EACH ROW EXECUTE FUNCTION mcp_services_set_updated_at();
+        """
+    )
+
     # mcp_service_versions
     op.create_table(
         "mcp_service_versions",
@@ -111,7 +132,12 @@ def upgrade() -> None:
     # call_logs
     op.create_table(
         "call_logs",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            primary_key=True,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
         sa.Column("ts", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("api_key_id", sa.Integer(), nullable=True),
         sa.Column("application_id", sa.Integer(), nullable=True),
@@ -159,6 +185,8 @@ def downgrade() -> None:
     op.drop_index("ix_call_logs_ts", table_name="call_logs")
     op.drop_table("call_logs")
     op.drop_table("mcp_service_versions")
+    op.execute("DROP TRIGGER IF EXISTS mcp_services_updated_at_trigger ON mcp_services")
+    op.execute("DROP FUNCTION IF EXISTS mcp_services_set_updated_at()")
     op.drop_table("mcp_services")
     op.drop_index("ix_api_keys_owner", table_name="api_keys")
     op.drop_index("ix_api_keys_key_prefix", table_name="api_keys")

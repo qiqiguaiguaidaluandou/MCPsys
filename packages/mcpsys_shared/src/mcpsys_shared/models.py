@@ -105,6 +105,8 @@ class ApiKey(Base):
     owner_type: Mapped[ApiKeyOwnerType] = mapped_column(Enum(ApiKeyOwnerType), nullable=False)
     owner_id: Mapped[int] = mapped_column(Integer, nullable=False)
     name: Mapped[str] = mapped_column(String(128), nullable=False)
+    # Reserved for v1: per-key scope tags (e.g. allowed service slugs / tool names).
+    # MVP gateway treats any active key as "can call any service".
     scopes: Mapped[dict] = mapped_column(
         JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
     )
