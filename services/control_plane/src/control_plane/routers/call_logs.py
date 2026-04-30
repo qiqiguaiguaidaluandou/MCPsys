@@ -35,10 +35,13 @@ class CallLogList(BaseModel):
     total: int
 
 
+# Restricted to admin/operator: viewer is global-read-only on metadata, but call_logs
+# can contain request/response bodies and tool arguments that may be sensitive across
+# applications. Per-tenant scoping for viewer is a v1 task (see spec §6).
 @router.get(
     "",
     response_model=CallLogList,
-    dependencies=[Depends(require_role("admin", "operator", "viewer"))],
+    dependencies=[Depends(require_role("admin", "operator"))],
 )
 async def list_call_logs(
     db: AsyncSession = Depends(get_db),

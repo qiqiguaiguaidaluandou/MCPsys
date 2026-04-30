@@ -26,6 +26,8 @@ class ServiceCreate(BaseModel):
     description: str | None = None
     owner_team: str | None = None
     tags: list[str] = Field(default_factory=list)
+    # endpoint_url is structurally validated only. Admin role is trusted to choose
+    # safe destinations; v1 should add an SSRF deny-list (link-local, loopback ranges).
     endpoint_url: HttpUrl
     transport: TransportType = TransportType.streamable_http
 
@@ -141,9 +143,12 @@ async def update_service(
     dependencies=[Depends(require_role("admin"))],
 )
 async def delete_service(slug: str, db: AsyncSession = Depends(get_db)) -> Response:
+    """Soft-delete: mark status=disabled. Preserves call_logs history and the slug → name
+    mapping the dashboard joins on. Hard delete via SQL if you really need it."""
     res = await db.execute(select(McpService).where(McpService.slug == slug))
     svc = res.scalar_one_or_none()
     if svc is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "service not found")
-    await db.delete(svc)
+    svc.status = ServiceStatus.disabled
+    await db.flush()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
