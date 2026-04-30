@@ -41,13 +41,26 @@ async def session_factory(engine) -> async_sessionmaker:
 
 
 @pytest.fixture
-async def app(engine, session_factory):
+async def app(engine, session_factory, redis_url):
+    from redis.asyncio import Redis
+
     from gateway.main import app as fastapi_app
+    from gateway.resolver import ServiceResolver
+    from gateway.telemetry import TelemetryWriter
 
     fastapi_app.state.engine = engine
     fastapi_app.state.session_factory = session_factory
     fastapi_app.state.http = httpx.AsyncClient()
-    return fastapi_app
+    fastapi_app.state.redis = Redis.from_url(redis_url, decode_responses=True)
+    await fastapi_app.state.redis.flushdb()
+    fastapi_app.state.resolver = ServiceResolver(session_factory=session_factory, ttl_seconds=60)
+    fastapi_app.state.telemetry = TelemetryWriter(
+        session_factory=session_factory, batch_size=10, flush_interval=0.1
+    )
+    await fastapi_app.state.telemetry.start()
+    yield fastapi_app
+    await fastapi_app.state.telemetry.stop()
+    await fastapi_app.state.redis.aclose()
 
 
 @pytest.fixture
