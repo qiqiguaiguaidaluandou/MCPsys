@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from mcpsys_shared.db import make_engine, make_session_factory
 
+from .routers import auth as auth_router
 from .settings import settings
 
 
@@ -16,6 +17,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="MCPsys Control Plane", version="0.1.0", lifespan=lifespan)
+app.include_router(auth_router.router)
 
 
 @app.get("/healthz")
