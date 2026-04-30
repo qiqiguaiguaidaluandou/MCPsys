@@ -39,8 +39,12 @@ async def get_current_user(
     user_id = payload.get("sub")
     if user_id is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "token missing sub")
+    try:
+        user_id_int = int(user_id)
+    except (TypeError, ValueError) as e:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "token sub not numeric") from e
 
-    res = await db.execute(select(User).where(User.id == int(user_id)))
+    res = await db.execute(select(User).where(User.id == user_id_int))
     user = res.scalar_one_or_none()
     if user is None or user.status != UserStatus.active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user inactive or missing")
