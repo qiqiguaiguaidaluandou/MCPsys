@@ -142,7 +142,7 @@ cd /dataspace/kqspace/MCPsys/services/web
     "dev": "vite --host 0.0.0.0",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "lint": "eslint src --ext .ts,.vue",
     "typecheck": "vue-tsc --noEmit"
@@ -162,6 +162,7 @@ cd /dataspace/kqspace/MCPsys/services/web
     "@types/node": "^20.12.0",
     "@vitejs/plugin-vue": "^5.0.4",
     "@vue/eslint-config-typescript": "^13.0.0",
+    "eslint-config-prettier": "^9.1.0",
     "@vue/test-utils": "^2.4.6",
     "eslint": "^8.57.0",
     "eslint-plugin-vue": "^9.25.0",
@@ -673,6 +674,8 @@ code, pre, .mono { font-family: var(--font-mono); }
 ```
 
 - [ ] **Step 5: 简易 favicon.svg（Lucide network 图标，主色蓝）**
+
+也需要在 `services/web/index.html` 的 `<head>` 中加回 `<link rel="icon" type="image/svg+xml" href="/favicon.svg" />`（T1 已移除以避免 404，T2 创建文件后必须重新引用）。
 
 ```xml
 <!-- /dataspace/kqspace/MCPsys/services/web/public/favicon.svg -->
