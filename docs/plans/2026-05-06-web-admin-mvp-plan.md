@@ -519,6 +519,7 @@ git commit -m "feat(web): scaffold vue 3 + vite + ts skeleton"
   --font-weight-bold:    700;
 
   // ─── 间距（4px 基础栅格） ──────────────
+  --space-0: 0;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -616,6 +617,7 @@ code, pre, .mono { font-family: var(--font-mono); }
     'success': ('base': #10B981),
     'warning': ('base': #F59E0B),
     'danger':  ('base': #EF4444),
+    'error':   ('base': #EF4444),
     'info':    ('base': #6366F1),
   ),
   $border-radius: (
@@ -647,6 +649,13 @@ code, pre, .mono { font-family: var(--font-mono); }
 .text-secondary { color: var(--color-gray-500); }
 .text-tertiary  { color: var(--color-gray-400); }
 .mono           { font-family: var(--font-mono); }
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
 
 .flex-row    { display: flex; flex-direction: row; align-items: center; gap: var(--space-2); }
 .flex-col    { display: flex; flex-direction: column; gap: var(--space-2); }
