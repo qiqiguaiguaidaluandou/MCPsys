@@ -27,8 +27,7 @@ export default defineConfig({
   css: {
     preprocessorOptions: {
       scss: {
-        // TODO(T2): restore this once element-overrides.scss exists
-        // additionalData: `@use "@/styles/element-overrides.scss" as *;`,
+        additionalData: `@use "@/styles/element-overrides.scss" as *;`,
       },
     },
   },
