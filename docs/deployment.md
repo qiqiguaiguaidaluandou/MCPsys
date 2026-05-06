@@ -15,7 +15,7 @@
 | Docker Compose | v2.20+（命令是 `docker compose`，非 `docker-compose`） | `docker compose version` |
 | 可用磁盘 | ≥ 20 GB（postgres + grafana + 镜像） | `df -h` |
 | 可用内存 | ≥ 2 GB（postgres 占大头） | `free -h` |
-| 开放端口 | 80（对外）；其他端口仅容器内通信 | `ss -tlnp \| grep :80` |
+| 开放端口 | 8088（对外）；其他端口仅容器内通信 | `ss -tlnp \| grep :8088` |
 | Git（可选） | 任意版本，仅用于代码拉取 | `git --version` |
 
 如果 Docker 没装：
@@ -188,12 +188,12 @@ docker compose exec control-plane python /app/scripts/seed_admin.py admin '<你�
 
 | 入口 | 路径 | 用途 |
 |---|---|---|
-| Control-plane 健康 | `http://<host>/healthz` | 应返回 `{"status":"ok"}` |
-| Gateway 健康 | `http://<host>/gw/healthz` | 同上 |
-| 管理 API（OpenAPI 文档） | `http://<host>/api/v1/openapi.json` | 给前端/集成方对照接口 |
-| 管理 API（Swagger UI） | `http://<host>/docs` | 浏览器交互调试 |
-| MCP 流量入口 | `POST http://<host>/mcp/<service-slug>` | Agent 调用入口 |
-| Grafana | `http://<host>/grafana/` | 监控面板，登录 `admin / <GRAFANA_ADMIN_PASSWORD>` |
+| Control-plane 健康 | `http://<host>:8088/healthz` | 应返回 `{"status":"ok"}` |
+| Gateway 健康 | `http://<host>:8088/gw/healthz` | 同上 |
+| 管理 API（OpenAPI 文档） | `http://<host>:8088/api/v1/openapi.json` | 给前端/集成方对照接口 |
+| 管理 API（Swagger UI） | `http://<host>:8088/docs` | 浏览器交互调试 |
+| MCP 流量入口 | `POST http://<host>:8088/mcp/<service-slug>` | Agent 调用入口 |
+| Grafana | `http://<host>:8088/grafana/` | 监控面板，登录 `admin / <GRAFANA_ADMIN_PASSWORD>` |
 
 进 Grafana 后默认会看到 "MCPsys" 文件夹下的 "MCP Overview" 仪表盘（4 个面板：24h 调用总数 / 错误率 / Top 服务 / 每分钟调用）。冒烟跑完后应该能看到 1-2 条数据。
 
@@ -227,18 +227,18 @@ docker compose exec redis redis-cli
 
 ```bash
 # 先用 admin 登录拿 JWT
-TOKEN=$(curl -s -X POST http://localhost/api/v1/auth/login \
+TOKEN=$(curl -s -X POST http://localhost:8088/api/v1/auth/login \
     -d "username=admin&password=<adminpw>" \
     | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
 # 创建 application
-APP=$(curl -s -X POST http://localhost/api/v1/applications \
+APP=$(curl -s -X POST http://localhost:8088/api/v1/applications \
     -H "Authorization: Bearer $TOKEN" -H "content-type: application/json" \
     -d '{"name":"team-foo-agent","team":"foo"}')
 APP_ID=$(echo "$APP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 
 # 签发 key（明文只会返回一次！）
-curl -s -X POST http://localhost/api/v1/api-keys \
+curl -s -X POST http://localhost:8088/api/v1/api-keys \
     -H "Authorization: Bearer $TOKEN" -H "content-type: application/json" \
     -d "{\"name\":\"team-foo prod\",\"owner_type\":\"application\",\"owner_id\":$APP_ID}" \
     | python3 -m json.tool
@@ -248,7 +248,7 @@ curl -s -X POST http://localhost/api/v1/api-keys \
 ### 注册一个新的 MCP 服务
 
 ```bash
-curl -X POST http://localhost/api/v1/services \
+curl -X POST http://localhost:8088/api/v1/services \
     -H "Authorization: Bearer $TOKEN" -H "content-type: application/json" \
     -d '{
       "slug":"hr-bot",
@@ -259,12 +259,12 @@ curl -X POST http://localhost/api/v1/services \
     }'
 ```
 
-之后 Agent 用 `POST http://<host>/mcp/hr-bot` 即可调用。
+之后 Agent 用 `POST http://<host>:8088/mcp/hr-bot` 即可调用。
 
 ### 吊销 API Key
 
 ```bash
-curl -X DELETE "http://localhost/api/v1/api-keys/<key_id>" \
+curl -X DELETE "http://localhost:8088/api/v1/api-keys/<key_id>" \
     -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -339,8 +339,8 @@ docker compose logs <service-name> --tail=100
 |---|---|---|
 | `control-plane` 启动后 die | alembic 连不上 postgres | 等 postgres healthy 后会自动重连；持续失败检查 `.env` 的 POSTGRES_* |
 | `gateway` die，日志报 connect refused | redis 没起来 | `docker compose restart redis` |
-| `nginx` 起不来，端口冲突 | 宿主 :80 被占 | `ss -tlnp \| grep :80` 看谁占用，停掉它或改 nginx 容器 ports 映射 |
-| 所有容器都 healthy 但访问 404 | 浏览器缓存 / 路径错 | 访问 `http://host/healthz` 验证基础路径 |
+| `nginx` 起不来，端口冲突 | 宿主 :8088 被占 | `ss -tlnp \| grep :8088` 看谁占用，停掉它或改 `compose.yaml` 中 nginx 的 ports 左侧端口 |
+| 所有容器都 healthy 但访问 404 | 浏览器缓存 / 路径错 | 访问 `http://<host>:8088/healthz` 验证基础路径 |
 
 ### 调用 `/mcp/<slug>` 401
 

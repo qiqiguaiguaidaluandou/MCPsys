@@ -26,11 +26,11 @@ Endpoints:
 
 | URL | Purpose |
 |---|---|
-| `http://localhost/healthz` | Control-plane health |
-| `http://localhost/gw/healthz` | Gateway health |
-| `http://localhost/api/v1/...` | Management API (JWT) |
-| `http://localhost/mcp/{slug}` | MCP traffic gateway (API Key) |
-| `http://localhost/grafana/` | Monitoring dashboard |
+| `http://localhost:8088/healthz` | Control-plane health |
+| `http://localhost:8088/gw/healthz` | Gateway health |
+| `http://localhost:8088/api/v1/...` | Management API (JWT) |
+| `http://localhost:8088/mcp/{slug}` | MCP traffic gateway (API Key) |
+| `http://localhost:8088/grafana/` | Monitoring dashboard |
 
 ## Development
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE="${BASE:-http://localhost}"
+BASE="${BASE:-http://localhost:8088}"
 USERNAME="${USERNAME:-admin}"
 PASSWORD="${PASSWORD:-SuperSecret123}"
 
