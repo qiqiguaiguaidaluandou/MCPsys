@@ -154,7 +154,7 @@ docker compose ps
 ## 5. 首次初始化：创建管理员
 
 ```bash
-docker compose exec control-plane python scripts/seed_admin.py admin '<你想要的强密码>'
+docker compose exec control-plane python /app/scripts/seed_admin.py admin '<你想要的强密码>'
 ```
 
 输出：`created admin 'admin'`

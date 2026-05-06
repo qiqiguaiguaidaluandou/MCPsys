@@ -8,6 +8,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock /app/
 COPY packages /app/packages
 COPY services/control_plane /app/services/control_plane
+COPY scripts /app/scripts
 
 RUN uv sync --frozen --package control-plane --no-dev
 ENV PATH="/app/.venv/bin:$PATH"

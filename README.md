@@ -16,7 +16,7 @@ docker compose build
 docker compose up -d
 
 # wait ~30s for healthchecks, then create the initial admin user
-docker compose exec control-plane python scripts/seed_admin.py admin SuperSecret123
+docker compose exec control-plane python /app/scripts/seed_admin.py admin SuperSecret123
 
 # run end-to-end smoke
 ./scripts/smoke.sh
