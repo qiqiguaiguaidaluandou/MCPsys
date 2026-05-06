@@ -23,7 +23,14 @@ async def lifespan(app: FastAPI):
     await app.state.engine.dispose()
 
 
-app = FastAPI(title="MCPsys Control Plane", version="0.1.0", lifespan=lifespan)
+app = FastAPI(
+    title="MCPsys Control Plane",
+    version="0.1.0",
+    lifespan=lifespan,
+    docs_url="/api/v1/docs",
+    openapi_url="/api/v1/openapi.json",
+    redoc_url="/api/v1/redoc",
+)
 app.include_router(auth_router.router)
 app.include_router(users_router.router)
 app.include_router(applications_router.router)

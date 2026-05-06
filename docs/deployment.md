@@ -191,7 +191,7 @@ docker compose exec control-plane python /app/scripts/seed_admin.py admin '<你�
 | Control-plane 健康 | `http://<host>:8088/healthz` | 应返回 `{"status":"ok"}` |
 | Gateway 健康 | `http://<host>:8088/gw/healthz` | 同上 |
 | 管理 API（OpenAPI 文档） | `http://<host>:8088/api/v1/openapi.json` | 给前端/集成方对照接口 |
-| 管理 API（Swagger UI） | `http://<host>:8088/docs` | 浏览器交互调试 |
+| 管理 API（Swagger UI） | `http://<host>:8088/api/v1/docs` | 浏览器交互调试 |
 | MCP 流量入口 | `POST http://<host>:8088/mcp/<service-slug>` | Agent 调用入口 |
 | Grafana | `http://<host>:8088/grafana/` | 监控面板，登录 `admin / <GRAFANA_ADMIN_PASSWORD>` |
 
