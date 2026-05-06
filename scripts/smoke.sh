@@ -3,7 +3,7 @@ set -euo pipefail
 
 BASE="${BASE:-http://localhost:8088}"
 USERNAME="${USERNAME:-admin}"
-PASSWORD="${PASSWORD:-SuperSecret123}"
+PASSWORD="${PASSWORD:-admin123}"
 
 echo "[smoke] healthz"
 curl -fsS "$BASE/healthz" | grep -q '"ok"'
