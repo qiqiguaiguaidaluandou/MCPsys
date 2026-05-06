@@ -122,7 +122,7 @@ openssl rand -base64 48
 | `POSTGRES_PORT` | `5432` | （未对外暴露，只在容器网络内） |
 | `REDIS_PORT` | `6379` | （同上） |
 | `JWT_EXPIRES_MINUTES` | `60` | JWT 过期时间 |
-| `GATEWAY_PORT` | `8080` | （容器内端口，外部走 nginx） |
+| `GATEWAY_PORT` | `8088` | （容器内端口，外部走 nginx） |
 | `CONTROL_PLANE_PORT` | `8000` | （同上） |
 | `GRAFANA_PORT` | `3000` | （同上） |
 | `GRAFANA_ADMIN_PASSWORD` | `admin` | **生产环境必改** |
