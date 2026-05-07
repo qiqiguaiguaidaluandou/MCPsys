@@ -84,6 +84,13 @@ services:
       postgres:
         condition: service_healthy
 
+  web:
+    build:
+      context: ./services/web
+      dockerfile: Dockerfile
+    depends_on:
+      - control-plane
+
   nginx:
     image: nginx:1.27-alpine
     volumes:
@@ -94,6 +101,7 @@ services:
       - control-plane
       - gateway
       - grafana
+      - web
 
 volumes:
   postgres-data:
