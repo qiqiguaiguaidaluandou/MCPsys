@@ -13,23 +13,24 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
-    "vue": "^3.4.27",
-    "vue-router": "^4.3.0",
-    "pinia": "^2.1.7",
+    "@vueuse/core": "^10.10.0",
+    "axios": "^1.7.0",
+    "dayjs": "^1.11.11",
     "element-plus": "^2.7.0",
     "lucide-vue-next": "^0.400.0",
-    "axios": "^1.7.0",
-    "@vueuse/core": "^10.10.0",
-    "dayjs": "^1.11.11",
-    "vue-i18n": "^9.13.0"
+    "pinia": "^2.1.7",
+    "vue": "^3.4.27",
+    "vue-i18n": "^9.13.0",
+    "vue-router": "^4.3.0"
   },
   "devDependencies": {
     "@types/node": "^20.12.0",
     "@vitejs/plugin-vue": "^5.0.4",
     "@vue/eslint-config-typescript": "^13.0.0",
-    "eslint-config-prettier": "^9.1.0",
     "@vue/test-utils": "^2.4.6",
+    "axios-mock-adapter": "^2.1.0",
     "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-vue": "^9.25.0",
     "jsdom": "^24.0.0",
     "prettier": "^3.2.5",
