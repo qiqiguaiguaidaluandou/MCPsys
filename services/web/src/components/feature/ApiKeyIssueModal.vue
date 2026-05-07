@@ -62,6 +62,17 @@ function close() {
   result.value = null;
   emit('update:modelValue', false);
 }
+
+function selectAll(e: MouseEvent) {
+  const node = e.currentTarget as HTMLElement;
+  const range = document.createRange();
+  range.selectNodeContents(node);
+  const sel = window.getSelection();
+  if (sel) {
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+}
 </script>
 
 <template>
@@ -104,8 +115,11 @@ function close() {
           <div class="plaintext-warning__desc">请立即复制并妥善保存。关闭后无法再次查看，需要重新签发新密钥。</div>
         </div>
       </div>
-      <div class="plaintext-box">
-        <span class="mono">{{ result?.plaintext }}</span>
+      <div class="plaintext-box mono" @click="selectAll">
+        {{ result?.plaintext }}
+      </div>
+      <div class="plaintext-actions">
+        <span class="plaintext-hint">点击文本框单击全选；如复制按钮失效请手动 Cmd/Ctrl+C</span>
         <CopyButton :text="result?.plaintext ?? ''" size="default" />
       </div>
     </template>
@@ -142,14 +156,26 @@ function close() {
   color: var(--color-gray-700);
 }
 .plaintext-box {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   background: var(--color-gray-50);
   border: 1px solid var(--color-gray-200);
   border-radius: var(--radius-base);
   font-size: var(--text-base);
+  line-height: 1.55;
   word-break: break-all;
+  user-select: all;
+  cursor: text;
+  color: var(--color-gray-900);
+}
+.plaintext-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+.plaintext-hint {
+  font-size: var(--text-xs);
+  color: var(--color-gray-500);
 }
 </style>
