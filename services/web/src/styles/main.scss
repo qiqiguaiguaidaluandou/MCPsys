@@ -1,0 +1,41 @@
+// /dataspace/kqspace/MCPsys/services/web/src/styles/main.scss
+
+@use './tokens';
+@use './reset';
+@use 'element-plus/theme-chalk/src/index' as *;
+
+// 工具类
+.text-secondary { color: var(--color-gray-500); }
+.text-tertiary  { color: var(--color-gray-400); }
+.mono           { font-family: var(--font-mono); }
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.flex-row    { display: flex; flex-direction: row; align-items: center; gap: var(--space-2); }
+.flex-col    { display: flex; flex-direction: column; gap: var(--space-2); }
+.flex-grow   { flex: 1 1 auto; }
+
+.card-base {
+  background: var(--color-surface);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-base);
+  padding: var(--space-5);
+}
+
+// Element Plus 微调
+.el-button {
+  font-weight: var(--font-weight-medium);
+}
+.el-table {
+  --el-table-border-color: var(--color-gray-200);
+  --el-table-row-hover-bg-color: var(--color-gray-50);
+}
+.el-card {
+  border-radius: var(--radius-base);
+  border-color: var(--color-gray-200);
+}

@@ -1,0 +1,47 @@
+// /dataspace/kqspace/MCPsys/services/web/src/styles/reset.scss
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  color: var(--color-gray-700);
+  background-color: var(--color-gray-50);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-gray-900);
+  line-height: var(--leading-tight);
+}
+
+p { margin: 0; }
+
+a {
+  color: var(--color-primary-500);
+  text-decoration: none;
+  transition: var(--transition-base);
+  &:hover { color: var(--color-primary-600); }
+}
+
+button { font-family: inherit; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--color-gray-300);
+  border-radius: 4px;
+  &:hover { background: var(--color-gray-400); }
+}
+
+code, pre, .mono { font-family: var(--font-mono); }
