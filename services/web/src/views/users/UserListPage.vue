@@ -66,7 +66,7 @@ onMounted(load);
   </PageHeader>
 
   <DataTable :data="items" :loading="loading">
-    <el-table-column prop="username" label="用户名" width="200">
+    <el-table-column prop="username" label="用户名" min-width="200">
       <template #default="{ row }: { row: User }">
         <router-link :to="`/users/${row.id}`" class="mono">{{ row.username }}</router-link>
         <el-tag v-if="row.id === auth.user?.id" size="small" effect="plain" style="margin-left: 8px;">我自己</el-tag>

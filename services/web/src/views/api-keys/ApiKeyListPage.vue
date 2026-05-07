@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
-import { listApiKeys, revokeApiKey, type ApiKey } from '@/api/api-keys';
+import { listApiKeys, revokeApiKey, deleteApiKeyPermanent, type ApiKey } from '@/api/api-keys';
 import PageHeader from '@/components/common/PageHeader.vue';
 import DataTable from '@/components/common/DataTable.vue';
 import StatusTag from '@/components/common/StatusTag.vue';
@@ -36,6 +36,22 @@ async function onRevoke(key: ApiKey) {
   await load();
 }
 
+async function onDelete(key: ApiKey) {
+  await ElMessageBox.confirm(
+    `确认永久删除 "${key.name}" (${key.key_prefix}...)？删除后记录从列表移除，无法恢复。`,
+    '永久删除 API Key',
+    {
+      type: 'warning',
+      confirmButtonText: '永久删除',
+      cancelButtonText: '取消',
+      confirmButtonClass: 'el-button--danger',
+    },
+  );
+  await deleteApiKeyPermanent(key.id);
+  ElMessage.success('已删除');
+  await load();
+}
+
 onMounted(load);
 </script>
 
@@ -55,7 +71,7 @@ onMounted(load);
         <CopyButton :text="row.key_prefix" />
       </template>
     </el-table-column>
-    <el-table-column prop="name" label="名称" width="200" />
+    <el-table-column prop="name" label="名称" min-width="200" />
     <el-table-column label="归属" width="160">
       <template #default="{ row }: { row: ApiKey }">
         {{ row.owner_type }} #{{ row.owner_id }}
@@ -72,10 +88,20 @@ onMounted(load);
     <el-table-column label="创建时间" width="140">
       <template #default="{ row }: { row: ApiKey }"><RelativeTime :value="row.created_at" /></template>
     </el-table-column>
-    <el-table-column label="操作" width="100" fixed="right">
+    <el-table-column label="操作" width="160" fixed="right">
       <template #default="{ row }: { row: ApiKey }">
-        <el-button v-if="!row.revoked_at" link type="danger" @click="onRevoke(row)">吊销</el-button>
-        <span v-else class="text-tertiary">已吊销</span>
+        <el-button
+          link
+          type="danger"
+          :disabled="!!row.revoked_at"
+          @click="onRevoke(row)"
+        >吊销</el-button>
+        <el-button
+          link
+          type="danger"
+          :disabled="!row.revoked_at"
+          @click="onDelete(row)"
+        >删除</el-button>
       </template>
     </el-table-column>
   </DataTable>

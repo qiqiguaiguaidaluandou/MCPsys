@@ -38,3 +38,7 @@ export function issueApiKey(payload: IssueApiKeyPayload): Promise<IssueApiKeyRes
 export function revokeApiKey(id: number): Promise<void> {
   return client.delete(`/api/v1/api-keys/${id}`).then(() => undefined);
 }
+
+export function deleteApiKeyPermanent(id: number): Promise<void> {
+  return client.delete(`/api/v1/api-keys/${id}/permanent`).then(() => undefined);
+}
