@@ -59,6 +59,7 @@ services:
       dockerfile: services/gateway/Dockerfile
     environment:
       <<: *app-env
+      PROXY_VERIFY_TLS: ${PROXY_VERIFY_TLS:-true}
     depends_on:
       postgres:
         condition: service_healthy

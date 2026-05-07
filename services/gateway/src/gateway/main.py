@@ -16,7 +16,10 @@ from .telemetry import TelemetryWriter
 async def lifespan(app: FastAPI):
     app.state.engine = make_engine(settings.database_url)
     app.state.session_factory = make_session_factory(app.state.engine)
-    app.state.http = httpx.AsyncClient(timeout=settings.proxy_timeout_seconds)
+    app.state.http = httpx.AsyncClient(
+        timeout=settings.proxy_timeout_seconds,
+        verify=settings.proxy_verify_tls,
+    )
     app.state.redis = Redis.from_url(settings.redis_url, decode_responses=True)
     app.state.resolver = ServiceResolver(
         session_factory=app.state.session_factory,
