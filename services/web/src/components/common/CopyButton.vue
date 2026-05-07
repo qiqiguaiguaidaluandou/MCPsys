@@ -8,11 +8,19 @@ const props = defineProps<{
   size?: 'small' | 'default';
 }>();
 
-const { copy } = useClipboard({ source: () => props.text });
+const { copy, copied } = useClipboard({ source: () => props.text, legacy: true });
 
 async function handleCopy() {
-  await copy(props.text);
-  ElMessage.success('已复制');
+  try {
+    await copy(props.text);
+    if (copied.value) {
+      ElMessage.success('已复制');
+    } else {
+      ElMessage.warning('复制失败，请手动选中文本复制');
+    }
+  } catch {
+    ElMessage.warning('复制失败，请手动选中文本复制');
+  }
 }
 </script>
 
