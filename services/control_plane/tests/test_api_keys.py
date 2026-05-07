@@ -80,3 +80,31 @@ async def test_revoke_api_key(client, admin_and_app):
     listing = await client.get("/api/v1/api-keys", headers=auth_header(admin))
     target = next(i for i in listing.json()["items"] if i["id"] == key_id)
     assert target["revoked_at"] is not None
+
+
+async def test_permanent_delete_requires_revoke(client, admin_and_app):
+    admin, app_obj = admin_and_app
+    create = await client.post(
+        "/api/v1/api-keys",
+        headers=auth_header(admin),
+        json={"name": "k3", "owner_type": "application", "owner_id": app_obj.id},
+    )
+    key_id = create.json()["id"]
+
+    # active key: permanent delete refused
+    refused = await client.delete(f"/api/v1/api-keys/{key_id}/permanent", headers=auth_header(admin))
+    assert refused.status_code == 409
+
+    # revoke first
+    await client.delete(f"/api/v1/api-keys/{key_id}", headers=auth_header(admin))
+
+    # now permanent delete succeeds
+    deleted = await client.delete(f"/api/v1/api-keys/{key_id}/permanent", headers=auth_header(admin))
+    assert deleted.status_code == 204
+
+    listing = await client.get("/api/v1/api-keys", headers=auth_header(admin))
+    assert all(i["id"] != key_id for i in listing.json()["items"])
+
+    # second permanent delete: 404
+    again = await client.delete(f"/api/v1/api-keys/{key_id}/permanent", headers=auth_header(admin))
+    assert again.status_code == 404

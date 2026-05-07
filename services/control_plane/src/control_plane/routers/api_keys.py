@@ -101,3 +101,20 @@ async def revoke_api_key(key_id: int, db: AsyncSession = Depends(get_db)) -> Res
         key.revoked_at = datetime.now(UTC)
         await db.flush()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete(
+    "/{key_id}/permanent",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_role("admin", "operator"))],
+)
+async def delete_api_key_permanent(key_id: int, db: AsyncSession = Depends(get_db)) -> Response:
+    res = await db.execute(select(ApiKey).where(ApiKey.id == key_id))
+    key = res.scalar_one_or_none()
+    if key is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "api key not found")
+    if key.revoked_at is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "key must be revoked before permanent delete")
+    await db.delete(key)
+    await db.flush()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
