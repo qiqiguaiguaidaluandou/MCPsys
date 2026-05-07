@@ -1,14 +1,16 @@
 <script setup lang="ts" generic="T">
 import EmptyState from './EmptyState.vue';
 
-defineProps<{
+withDefaults(defineProps<{
   data: T[];
   loading?: boolean;
   total?: number;
   page?: number;
   pageSize?: number;
   emptyTitle?: string;
-}>();
+}>(), {
+  loading: false,
+});
 
 defineEmits<{
   'update:page': [page: number];
