@@ -188,6 +188,7 @@ docker compose exec control-plane python /app/scripts/seed_admin.py admin '<你�
 
 | 入口 | 路径 | 用途 |
 |---|---|---|
+| Web 管理后台 | `http://<host>:8088/` | 浏览器进站，登录后操作 |
 | Control-plane 健康 | `http://<host>:8088/healthz` | 应返回 `{"status":"ok"}` |
 | Gateway 健康 | `http://<host>:8088/gw/healthz` | 同上 |
 | 管理 API（OpenAPI 文档） | `http://<host>:8088/api/v1/openapi.json` | 给前端/集成方对照接口 |
@@ -390,17 +391,22 @@ UPDATE call_logs SET request_body=NULL, response_body=NULL
 ## 13. 关键文件速查
 
 ```
-.env.example          # 环境变量模板
-compose.yaml          # 服务编排
-nginx/nginx.conf      # 反向代理
-grafana/provisioning/ # Grafana 自动配置
-scripts/seed_admin.py # 创建初始 admin
-scripts/smoke.sh      # 端到端冒烟
-docs/specs/           # 设计文档
-docs/plans/           # 实施计划
+.env.example                                # 环境变量模板
+compose.yaml                                # 服务编排
+nginx/nginx.conf                            # 反向代理
+grafana/provisioning/                       # Grafana 自动配置
+scripts/seed_admin.py                       # 创建初始 admin
+scripts/smoke.sh                            # 后端端到端冒烟
+scripts/web-smoke.sh                        # 前端冒烟（HTTP 探活）
+services/web/                               # Vue 3 管理后台
+services/web/Dockerfile
+services/web/src/
+docs/specs/                                 # 设计文档
+docs/specs/2026-05-06-web-admin-design.md   # 前端设计
+docs/plans/                                 # 实施计划
 ```
 
-应用代码在 `services/control_plane/` 和 `services/gateway/`，共享层在 `packages/mcpsys_shared/`。
+应用代码在 `services/control_plane/`、`services/gateway/` 和 `services/web/`，共享层在 `packages/mcpsys_shared/`。
 
 ---
 

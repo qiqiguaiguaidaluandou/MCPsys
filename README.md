@@ -26,9 +26,11 @@ Endpoints:
 
 | URL | Purpose |
 |---|---|
+| `http://localhost:8088/` | Web admin UI |
 | `http://localhost:8088/healthz` | Control-plane health |
 | `http://localhost:8088/gw/healthz` | Gateway health |
 | `http://localhost:8088/api/v1/...` | Management API (JWT) |
+| `http://localhost:8088/api/v1/docs` | Swagger UI |
 | `http://localhost:8088/mcp/{slug}` | MCP traffic gateway (API Key) |
 | `http://localhost:8088/grafana/` | Monitoring dashboard |
 
@@ -43,6 +45,23 @@ uv run --package control-plane pytest services/control_plane/tests
 uv run --package gateway        pytest services/gateway/tests
 uv run --package mcpsys-shared  pytest packages/mcpsys_shared/tests
 ```
+
+### Web frontend
+
+```bash
+# start backend stack once
+docker compose up -d
+
+cd services/web
+pnpm install
+
+pnpm dev                          # HMR dev server on http://localhost:5173
+pnpm test                         # vitest unit tests
+pnpm typecheck                    # vue-tsc --noEmit
+pnpm build                        # production bundle to dist/
+```
+
+Design doc: `docs/specs/2026-05-06-web-admin-design.md`.
 
 ## Architecture
 
