@@ -9,6 +9,7 @@ describe('axios client', () => {
 
   beforeEach(() => {
     setActivePinia(createPinia());
+    localStorage.clear();
     mock = new MockAdapter(client);
   });
 
