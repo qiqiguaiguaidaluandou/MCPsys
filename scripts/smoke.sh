@@ -37,6 +37,17 @@ APIKEY=$(curl -fsS -X POST "$BASE/api/v1/api-keys" \
     | python -c "import sys,json; print(json.load(sys.stdin)['plaintext'])")
 echo "got api key: ${APIKEY:0:12}..."
 
+echo "[smoke] (negative) call before grant — expect 403"
+HTTP=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/mcp/smoke-svc" \
+    -H "Authorization: Bearer $APIKEY" -H "content-type: application/json" \
+    -d '{"jsonrpc":"2.0","method":"tools/list","id":1}')
+test "$HTTP" = "403" || { echo "expected 403 got $HTTP"; exit 1; }
+
+echo "[smoke] grant permission smoke-app → smoke-svc"
+curl -fsS -X POST "$BASE/api/v1/services/smoke-svc/permissions" \
+    -H "Authorization: Bearer $TOKEN" -H "content-type: application/json" \
+    -d "{\"application_id\":$APP_ID}" >/dev/null
+
 echo "[smoke] proxy through gateway"
 curl -fsS -X POST "$BASE/mcp/smoke-svc" \
     -H "Authorization: Bearer $APIKEY" -H "content-type: application/json" \
