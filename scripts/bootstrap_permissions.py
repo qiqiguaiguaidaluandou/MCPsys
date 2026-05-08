@@ -33,74 +33,76 @@ from mcpsys_shared.settings import SharedSettings
 async def main(dry_run: bool) -> int:
     engine = make_engine(SharedSettings().database_url)
     sf = make_session_factory(engine)
-
-    async with sf() as s:
-        keys = (
-            (
-                await s.execute(
-                    select(ApiKey).where(
-                        ApiKey.owner_type == ApiKeyOwnerType.application,
-                        ApiKey.revoked_at.is_(None),
+    try:
+        async with sf() as s:
+            keys = (
+                (
+                    await s.execute(
+                        select(ApiKey).where(
+                            ApiKey.owner_type == ApiKeyOwnerType.application,
+                            ApiKey.revoked_at.is_(None),
+                        )
                     )
                 )
+                .scalars()
+                .all()
             )
-            .scalars()
-            .all()
-        )
-        services = (
-            (
-                await s.execute(
-                    select(McpService).where(McpService.status == ServiceStatus.active)
-                )
-            )
-            .scalars()
-            .all()
-        )
-        existing = (
-            (
-                await s.execute(
-                    select(
-                        ServicePermission.application_id, ServicePermission.service_id
+            services = (
+                (
+                    await s.execute(
+                        select(McpService).where(McpService.status == ServiceStatus.active)
                     )
                 )
+                .scalars()
+                .all()
             )
-            .all()
-        )
+            existing = (
+                (
+                    await s.execute(
+                        select(
+                            ServicePermission.application_id, ServicePermission.service_id
+                        )
+                    )
+                )
+                .all()
+            )
 
-        app_ids = sorted({k.owner_id for k in keys})
-        existing_pairs = set(map(tuple, existing))
-        to_create: list[tuple[int, int]] = []
-        for app_id in app_ids:
-            for svc in services:
-                if (app_id, svc.id) not in existing_pairs:
-                    to_create.append((app_id, svc.id))
+            app_ids = sorted({k.owner_id for k in keys})
+            existing_pairs = set(map(tuple, existing))
+            to_create: list[tuple[int, int]] = []
+            for app_id in app_ids:
+                for svc in services:
+                    if (app_id, svc.id) not in existing_pairs:
+                        to_create.append((app_id, svc.id))
 
-        print(
-            f"[bootstrap] active app-owned keys: {len(keys)} → {len(app_ids)} unique apps"
-        )
-        print(f"[bootstrap] active services: {len(services)}")
-        print(f"[bootstrap] existing grants: {len(existing_pairs)}")
-        print(f"[bootstrap] new grants to insert: {len(to_create)}")
+            print(
+                f"[bootstrap] active app-owned keys: {len(keys)} → {len(app_ids)} unique apps"
+            )
+            print(f"[bootstrap] active services: {len(services)}")
+            print(f"[bootstrap] existing grants: {len(existing_pairs)}")
+            print(f"[bootstrap] new grants to insert: {len(to_create)}")
 
-        if dry_run:
-            print("[bootstrap] dry run — no changes written")
+            if dry_run:
+                print("[bootstrap] dry run — no changes written")
+                return 0
+
+            for app_id, svc_id in to_create:
+                s.add(
+                    ServicePermission(
+                        application_id=app_id, service_id=svc_id, note="bootstrap v1a"
+                    )
+                )
+
+            try:
+                await s.commit()
+            except IntegrityError as e:
+                print(f"[bootstrap] integrity error (likely concurrent run): {e}", file=sys.stderr)
+                return 2
+
+            print(f"[bootstrap] inserted {len(to_create)} grants")
             return 0
-
-        for app_id, svc_id in to_create:
-            s.add(
-                ServicePermission(
-                    application_id=app_id, service_id=svc_id, note="bootstrap v1a"
-                )
-            )
-
-        try:
-            await s.commit()
-        except IntegrityError as e:
-            print(f"[bootstrap] integrity error (likely concurrent run): {e}", file=sys.stderr)
-            return 2
-
-        print(f"[bootstrap] inserted {len(to_create)} grants")
-        return 0
+    finally:
+        await engine.dispose()
 
 
 if __name__ == "__main__":
