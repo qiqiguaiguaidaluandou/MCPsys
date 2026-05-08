@@ -6,6 +6,7 @@ from redis.asyncio import Redis
 
 from mcpsys_shared.db import make_engine, make_session_factory
 
+from .policy import PolicyCache
 from .resolver import ServiceResolver
 from .routers import mcp as mcp_router
 from .settings import settings
@@ -24,6 +25,10 @@ async def lifespan(app: FastAPI):
     app.state.resolver = ServiceResolver(
         session_factory=app.state.session_factory,
         ttl_seconds=settings.service_cache_ttl_seconds,
+    )
+    app.state.policy = PolicyCache(
+        session_factory=app.state.session_factory,
+        ttl_seconds=settings.policy_cache_ttl_seconds,
     )
     app.state.telemetry = TelemetryWriter(
         session_factory=app.state.session_factory,

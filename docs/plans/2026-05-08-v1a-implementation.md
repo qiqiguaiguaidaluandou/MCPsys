@@ -895,11 +895,11 @@ from mcpsys_shared.models import (
     ServicePermission,
     ServiceStatus,
 )
-from mcpsys_shared.settings import settings
+from mcpsys_shared.settings import SharedSettings
 
 
 async def main(dry_run: bool) -> int:
-    engine = make_engine(settings.database_url)
+    engine = make_engine(SharedSettings().database_url)
     sf = make_session_factory(engine)
 
     async with sf() as s:

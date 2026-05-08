@@ -80,7 +80,36 @@ async def proxy_mcp(
     except ServiceNotFound as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"service not found: {slug}") from e
 
-    # 3. authz: MVP only checks key is active (already enforced in step 1)
+    # 3. authz: application → service whitelist (V1-A)
+    policy = request.app.state.policy
+    allowed = await policy.is_allowed(
+        application_id=resolved_key.application_id,
+        service_id=svc.service_id,
+    )
+    if not allowed:
+        denied_entry = CallLogEntry(
+            api_key_id=resolved_key.api_key_id,
+            application_id=resolved_key.application_id,
+            user_id=resolved_key.user_id,
+            service_id=svc.service_id,
+            service_version=None,
+            tool_name=tool_label,
+            request_id=jsonrpc_id or request_id,
+            status=CallStatus.error,    # TODO(v1a-pr2): switch to CallStatus.denied once enum extends
+            http_status=403,
+            error_code="permission_denied",
+            error_message="application not authorized",
+            duration_ms=0,
+            request_bytes=len(body),
+            response_bytes=0,
+            request_body=_truncate(body, settings.body_log_max_bytes),
+            response_body=None,
+            client_ip=client_ip,
+        )
+        await telemetry.enqueue(denied_entry)
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "application not authorized for this service"
+        )
 
     # 4. forward
     extra = {

@@ -218,3 +218,27 @@ class AuditEvent(Base):
     before: Mapped[dict | None] = mapped_column(JSONB)
     after: Mapped[dict | None] = mapped_column(JSONB)
     ip: Mapped[str | None] = mapped_column(String(64))
+
+
+class ServicePermission(Base):
+    """White-list grant: (application × service). Row exists ⇒ allowed.
+    Default-deny semantics: no row means no access."""
+
+    __tablename__ = "service_permissions"
+    __table_args__ = (
+        UniqueConstraint("application_id", "service_id", name="uq_service_permissions_app_service"),
+        Index("ix_service_permissions_service", "service_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    application_id: Mapped[int] = mapped_column(
+        ForeignKey("applications.id", ondelete="CASCADE"), nullable=False
+    )
+    service_id: Mapped[int] = mapped_column(
+        ForeignKey("mcp_services.id", ondelete="CASCADE"), nullable=False
+    )
+    granted_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    granted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    note: Mapped[str | None] = mapped_column(Text)

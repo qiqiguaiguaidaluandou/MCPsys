@@ -40,11 +40,22 @@ async def session_factory(engine) -> async_sessionmaker:
     return make_session_factory(engine)
 
 
+@pytest.fixture(autouse=True)
+async def _clean_db(engine):
+    """Truncate all tables after each test so session-scoped engine + DB stay
+    clean across tests. Cheaper than recreating the schema per test."""
+    yield
+    async with engine.begin() as conn:
+        for tbl in reversed(Base.metadata.sorted_tables):
+            await conn.execute(tbl.delete())
+
+
 @pytest.fixture
 async def app(engine, session_factory, redis_url):
     from redis.asyncio import Redis
 
     from gateway.main import app as fastapi_app
+    from gateway.policy import PolicyCache
     from gateway.resolver import ServiceResolver
     from gateway.telemetry import TelemetryWriter
 
@@ -54,6 +65,7 @@ async def app(engine, session_factory, redis_url):
     fastapi_app.state.redis = Redis.from_url(redis_url, decode_responses=True)
     await fastapi_app.state.redis.flushdb()
     fastapi_app.state.resolver = ServiceResolver(session_factory=session_factory, ttl_seconds=60)
+    fastapi_app.state.policy = PolicyCache(session_factory=session_factory, ttl_seconds=30)
     fastapi_app.state.telemetry = TelemetryWriter(
         session_factory=session_factory, batch_size=10, flush_interval=0.1
     )
