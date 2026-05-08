@@ -104,3 +104,48 @@ async def test_delete_service_soft_marks_disabled(client, admin):
     resp2 = await client.get("/api/v1/services/tmp", headers=auth_header(admin))
     assert resp2.status_code == 200
     assert resp2.json()["status"] == "disabled"
+
+
+async def test_create_service_with_qps(client, admin):
+    resp = await client.post(
+        "/api/v1/services",
+        headers=auth_header(admin),
+        json={
+            "slug": "qps-svc",
+            "display_name": "Q",
+            "endpoint_url": "http://q/mcp",
+            "rate_limit_qps": 5,
+        },
+    )
+    assert resp.status_code == 201
+    assert resp.json()["rate_limit_qps"] == 5
+
+
+async def test_patch_qps_to_null_clears(client, admin):
+    await client.post(
+        "/api/v1/services",
+        headers=auth_header(admin),
+        json={"slug": "qps-clear", "display_name": "Q", "endpoint_url": "http://q/mcp", "rate_limit_qps": 5},
+    )
+    resp = await client.patch(
+        "/api/v1/services/qps-clear",
+        headers=auth_header(admin),
+        json={"rate_limit_qps": None},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["rate_limit_qps"] is None
+
+
+async def test_patch_qps_to_zero_blocks(client, admin):
+    await client.post(
+        "/api/v1/services",
+        headers=auth_header(admin),
+        json={"slug": "qps-zero", "display_name": "Q", "endpoint_url": "http://q/mcp"},
+    )
+    resp = await client.patch(
+        "/api/v1/services/qps-zero",
+        headers=auth_header(admin),
+        json={"rate_limit_qps": 0},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["rate_limit_qps"] == 0

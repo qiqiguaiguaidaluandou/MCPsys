@@ -25,6 +25,21 @@ async def admin_and_app(session_factory):
         return u, a
 
 
+@pytest.fixture
+async def admin(session_factory):
+    async with session_factory() as s:
+        u = User(
+            username="qps-key-admin",
+            password_hash=hash_password("p"),
+            role=UserRole.admin,
+            status=UserStatus.active,
+        )
+        s.add(u)
+        await s.commit()
+        await s.refresh(u)
+        return u
+
+
 def auth_header(user):
     token = encode_jwt(
         {"sub": str(user.id), "role": user.role.value},
@@ -108,3 +123,66 @@ async def test_permanent_delete_requires_revoke(client, admin_and_app):
     # second permanent delete: 404
     again = await client.delete(f"/api/v1/api-keys/{key_id}/permanent", headers=auth_header(admin))
     assert again.status_code == 404
+
+
+async def test_create_api_key_with_qps(client, admin):
+    # need an application to own the key
+    app_resp = await client.post(
+        "/api/v1/applications",
+        headers=auth_header(admin),
+        json={"name": "qps-key-app"},
+    )
+    assert app_resp.status_code == 201
+    app_id = app_resp.json()["id"]
+
+    resp = await client.post(
+        "/api/v1/api-keys",
+        headers=auth_header(admin),
+        json={
+            "name": "qps-key",
+            "owner_type": "application",
+            "owner_id": app_id,
+            "rate_limit_qps": 10,
+        },
+    )
+    assert resp.status_code == 201
+    # ApiKeyCreated does not include rate_limit_qps; just verify create succeeded.
+    key_id = resp.json()["id"]
+
+    # Read back via list, find this key, confirm rate_limit_qps stored
+    list_resp = await client.get("/api/v1/api-keys", headers=auth_header(admin))
+    rows = [k for k in list_resp.json()["items"] if k["id"] == key_id]
+    assert rows and rows[0]["rate_limit_qps"] == 10
+
+
+async def test_patch_api_key_qps(client, admin):
+    app_resp = await client.post(
+        "/api/v1/applications",
+        headers=auth_header(admin),
+        json={"name": "qps-key-app2"},
+    )
+    app_id = app_resp.json()["id"]
+
+    create_resp = await client.post(
+        "/api/v1/api-keys",
+        headers=auth_header(admin),
+        json={"name": "k2", "owner_type": "application", "owner_id": app_id},
+    )
+    key_id = create_resp.json()["id"]
+
+    patch_resp = await client.patch(
+        f"/api/v1/api-keys/{key_id}",
+        headers=auth_header(admin),
+        json={"rate_limit_qps": 7},
+    )
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["rate_limit_qps"] == 7
+
+    # Patch to null clears it
+    clear_resp = await client.patch(
+        f"/api/v1/api-keys/{key_id}",
+        headers=auth_header(admin),
+        json={"rate_limit_qps": None},
+    )
+    assert clear_resp.status_code == 200
+    assert clear_resp.json()["rate_limit_qps"] is None

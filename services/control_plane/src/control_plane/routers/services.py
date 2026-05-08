@@ -30,6 +30,7 @@ class ServiceCreate(BaseModel):
     # safe destinations; v1 should add an SSRF deny-list (link-local, loopback ranges).
     endpoint_url: HttpUrl
     transport: TransportType = TransportType.streamable_http
+    rate_limit_qps: int | None = Field(default=None, ge=0)
 
     @field_validator("slug")
     @classmethod
@@ -46,6 +47,7 @@ class ServiceUpdate(BaseModel):
     tags: list[str] | None = None
     endpoint_url: HttpUrl | None = None
     status: ServiceStatus | None = None
+    rate_limit_qps: int | None = None
 
 
 class ServiceOut(BaseModel):
@@ -60,6 +62,7 @@ class ServiceOut(BaseModel):
     transport: TransportType
     status: ServiceStatus
     health_status: HealthStatus
+    rate_limit_qps: int | None
 
 
 class ServiceList(BaseModel):
@@ -82,6 +85,7 @@ async def create_service(payload: ServiceCreate, db: AsyncSession = Depends(get_
         tags=payload.tags,
         endpoint_url=str(payload.endpoint_url),
         transport=payload.transport,
+        rate_limit_qps=payload.rate_limit_qps,
     )
     db.add(svc)
     try:
