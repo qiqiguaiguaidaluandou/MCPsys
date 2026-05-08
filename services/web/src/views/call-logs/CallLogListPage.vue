@@ -81,9 +81,11 @@ function getServiceSlug(id: number): string {
       <el-option v-for="s in services" :key="s.id" :value="s.id" :label="s.slug" />
     </el-select>
     <el-select v-model="filters.status" placeholder="状态" clearable style="width: 120px;" @change="load">
-      <el-option label="success" value="success" />
-      <el-option label="error" value="error" />
-      <el-option label="timeout" value="timeout" />
+      <el-option label="成功" value="success" />
+      <el-option label="错误" value="error" />
+      <el-option label="超时" value="timeout" />
+      <el-option label="拒绝" value="denied" />
+      <el-option label="限流" value="throttled" />
     </el-select>
     <div style="flex: 1" />
     <el-button @click="load"><Icon name="refresh-cw" :size="14" /> 刷新</el-button>

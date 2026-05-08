@@ -1,7 +1,7 @@
 import { client } from './client';
 import type { PaginatedList } from './types';
 
-export type CallStatus = 'success' | 'error' | 'timeout';
+export type CallStatus = 'success' | 'error' | 'timeout' | 'denied' | 'throttled';
 
 export interface CallLog {
   id: string;
