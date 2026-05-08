@@ -40,6 +40,16 @@ async def session_factory(engine) -> async_sessionmaker:
     return make_session_factory(engine)
 
 
+@pytest.fixture(autouse=True)
+async def _clean_db(engine):
+    """Truncate all tables after each test so session-scoped engine + DB stay
+    clean across tests. Cheaper than recreating the schema per test."""
+    yield
+    async with engine.begin() as conn:
+        for tbl in reversed(Base.metadata.sorted_tables):
+            await conn.execute(tbl.delete())
+
+
 @pytest.fixture
 async def app(engine, session_factory, redis_url):
     from redis.asyncio import Redis
