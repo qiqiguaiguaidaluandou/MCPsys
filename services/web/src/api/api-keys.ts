@@ -10,6 +10,7 @@ export interface ApiKey {
   owner_type: OwnerType;
   owner_id: number;
   scopes: Record<string, unknown> | null;
+  rate_limit_qps: number | null;
   expires_at: string | null;
   last_used_at: string | null;
   revoked_at: string | null;
@@ -25,6 +26,7 @@ export interface IssueApiKeyPayload {
   owner_type: OwnerType;
   owner_id: number;
   expires_at?: string;
+  rate_limit_qps?: number | null;
 }
 
 export interface IssueApiKeyResponse extends ApiKey {
@@ -33,6 +35,14 @@ export interface IssueApiKeyResponse extends ApiKey {
 
 export function issueApiKey(payload: IssueApiKeyPayload): Promise<IssueApiKeyResponse> {
   return client.post('/api/v1/api-keys', payload).then((r) => r.data);
+}
+
+export interface UpdateApiKeyPayload {
+  rate_limit_qps?: number | null;
+}
+
+export function updateApiKey(id: number, payload: UpdateApiKeyPayload): Promise<ApiKey> {
+  return client.patch(`/api/v1/api-keys/${id}`, payload).then((r) => r.data);
 }
 
 export function revokeApiKey(id: number): Promise<void> {

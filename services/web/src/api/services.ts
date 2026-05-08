@@ -16,6 +16,7 @@ export interface McpService {
   transport: Transport;
   status: ServiceStatus;
   health_status: HealthStatus;
+  rate_limit_qps: number | null;
   last_health_check_at: string | null;
   created_at: string;
   updated_at: string;
@@ -35,10 +36,24 @@ export interface CreateServicePayload {
   endpoint_url: string;
   description?: string;
   owner_team?: string;
+  rate_limit_qps?: number | null;
 }
 
 export function createService(payload: CreateServicePayload): Promise<McpService> {
   return client.post('/api/v1/services', payload).then((r) => r.data);
+}
+
+export interface UpdateServicePayload {
+  endpoint_url?: string;
+  status?: ServiceStatus;
+  rate_limit_qps?: number | null;
+  display_name?: string;
+  description?: string;
+  owner_team?: string;
+}
+
+export function updateService(slug: string, payload: UpdateServicePayload): Promise<McpService> {
+  return client.patch(`/api/v1/services/${slug}`, payload).then((r) => r.data);
 }
 
 export function disableService(id: number): Promise<void> {
