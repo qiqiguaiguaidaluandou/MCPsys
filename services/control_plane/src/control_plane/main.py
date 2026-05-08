@@ -9,6 +9,7 @@ from .routers import (
     applications as applications_router,
     auth as auth_router,
     call_logs as call_logs_router,
+    permissions as permissions_router,
     services as services_router,
     users as users_router,
 )
@@ -37,6 +38,7 @@ app.include_router(applications_router.router)
 app.include_router(services_router.router)
 app.include_router(api_keys_router.router)
 app.include_router(call_logs_router.router)
+app.include_router(permissions_router.router)
 
 
 @app.get("/healthz")
