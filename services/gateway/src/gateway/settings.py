@@ -11,6 +11,7 @@ class GatewaySettings(SharedSettings):
     proxy_verify_tls: bool = Field(default=True)
     api_key_cache_ttl_seconds: int = Field(default=60)
     service_cache_ttl_seconds: int = Field(default=60)
+    policy_cache_ttl_seconds: int = Field(default=30)
     telemetry_flush_interval_seconds: float = Field(default=1.0)
     telemetry_batch_size: int = Field(default=100)
     body_log_max_bytes: int = Field(default=64 * 1024)

@@ -13,6 +13,7 @@ from mcpsys_shared.models import (
     Application,
     CallLog,
     McpService,
+    ServicePermission,
     ServiceStatus,
     TransportType,
     User,
@@ -46,6 +47,8 @@ async def seed(session_factory):
             status=ServiceStatus.active,
         )
         s.add(svc)
+        await s.flush()
+        s.add(ServicePermission(application_id=a.id, service_id=svc.id, granted_by=u.id))
         await s.commit()
         await s.refresh(svc)
         return plain, svc.id
@@ -118,4 +121,65 @@ async def test_upstream_5xx_passes_through_and_logged_as_error(client, seed, ses
         )
         log = res.scalars().first()
         assert log is not None
+        assert log.status == CallStatus.error
+
+
+@pytest.fixture
+async def seed_no_permission(session_factory):
+    """Seed app+key+service WITHOUT a ServicePermission grant."""
+    async with session_factory() as s:
+        u = User(username="orphan-owner", role=UserRole.viewer)
+        s.add(u)
+        await s.flush()
+        a = Application(name="orphan-app", owner_user_id=u.id)
+        s.add(a)
+        await s.flush()
+        plain = "mcpk_orphankey_xx"
+        k = ApiKey(
+            name="orphan",
+            key_prefix=plain[5:13],
+            key_hash=bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode(),
+            owner_type=ApiKeyOwnerType.application,
+            owner_id=a.id,
+        )
+        s.add(k)
+        svc = McpService(
+            slug="locked",
+            display_name="Locked",
+            endpoint_url="http://upstream-locked/mcp",
+            transport=TransportType.streamable_http,
+            status=ServiceStatus.active,
+        )
+        s.add(svc)
+        await s.commit()
+        await s.refresh(svc)
+        return plain, svc.id
+
+
+@respx.mock
+async def test_unauthorized_application_returns_403(client, seed_no_permission, session_factory):
+    plain, svc_id = seed_no_permission
+    # If the upstream is hit, this mock would fire — we will assert it does NOT.
+    upstream = respx.post("http://upstream-locked/mcp").respond(200, json={"ok": True})
+
+    resp = await client.post(
+        "/mcp/locked",
+        headers={"Authorization": f"Bearer {plain}", "content-type": "application/json"},
+        content=b'{"jsonrpc":"2.0","method":"tools/list","id":1}',
+    )
+    assert resp.status_code == 403
+    assert resp.json()["detail"] == "application not authorized for this service"
+    assert not upstream.called
+
+    # call_log row is written even on deny
+    await asyncio.sleep(0.3)
+    async with session_factory() as s:
+        from mcpsys_shared.models import CallStatus
+        res = await s.execute(
+            select(CallLog).where(CallLog.service_id == svc_id, CallLog.http_status == 403)
+        )
+        log = res.scalars().first()
+        assert log is not None
+        assert log.error_code == "permission_denied"
+        # NOTE: status will be CallStatus.denied after PR2; for now placeholder error.
         assert log.status == CallStatus.error
