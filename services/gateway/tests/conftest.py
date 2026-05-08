@@ -80,3 +80,13 @@ async def client(app) -> AsyncIterator[AsyncClient]:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
     await app.state.http.aclose()
+
+
+@pytest.fixture
+async def redis_client(redis_url):
+    from redis.asyncio import Redis
+
+    r = Redis.from_url(redis_url, decode_responses=True)
+    await r.flushdb()
+    yield r
+    await r.aclose()
