@@ -62,6 +62,8 @@ class CallStatus(str, enum.Enum):
     success = "success"
     error = "error"
     timeout = "timeout"
+    denied = "denied"
+    throttled = "throttled"
 
 
 # --- tables ---
@@ -116,6 +118,7 @@ class ApiKey(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+    rate_limit_qps: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class McpService(Base):
@@ -146,6 +149,7 @@ class McpService(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    rate_limit_qps: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class McpServiceVersion(Base):

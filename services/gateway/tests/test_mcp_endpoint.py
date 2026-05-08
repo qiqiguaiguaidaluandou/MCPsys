@@ -181,5 +181,4 @@ async def test_unauthorized_application_returns_403(client, seed_no_permission, 
         log = res.scalars().first()
         assert log is not None
         assert log.error_code == "permission_denied"
-        # NOTE: status will be CallStatus.denied after PR2; for now placeholder error.
-        assert log.status == CallStatus.error
+        assert log.status == CallStatus.denied

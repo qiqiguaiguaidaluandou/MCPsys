@@ -95,7 +95,7 @@ async def proxy_mcp(
             service_version=None,
             tool_name=tool_label,
             request_id=jsonrpc_id or request_id,
-            status=CallStatus.error,    # TODO(v1a-pr2): switch to CallStatus.denied once enum extends
+            status=CallStatus.denied,
             http_status=403,
             error_code="permission_denied",
             error_message="application not authorized",
