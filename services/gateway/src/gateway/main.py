@@ -7,6 +7,7 @@ from redis.asyncio import Redis
 from mcpsys_shared.db import make_engine, make_session_factory
 
 from .policy import PolicyCache
+from .ratelimit import TokenBucket
 from .resolver import ServiceResolver
 from .routers import mcp as mcp_router
 from .settings import settings
@@ -22,6 +23,7 @@ async def lifespan(app: FastAPI):
         verify=settings.proxy_verify_tls,
     )
     app.state.redis = Redis.from_url(settings.redis_url, decode_responses=True)
+    app.state.ratelimit = TokenBucket(app.state.redis)
     app.state.resolver = ServiceResolver(
         session_factory=app.state.session_factory,
         ttl_seconds=settings.service_cache_ttl_seconds,

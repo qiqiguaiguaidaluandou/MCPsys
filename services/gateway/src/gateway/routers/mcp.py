@@ -111,6 +111,39 @@ async def proxy_mcp(
             status.HTTP_403_FORBIDDEN, "application not authorized for this service"
         )
 
+    # 3.5 ratelimit (V1-A): key bucket then service bucket
+    ratelimit = request.app.state.ratelimit
+    rl_key = await ratelimit.check(
+        f"rl:k:{resolved_key.api_key_id}", qps=resolved_key.rate_limit_qps
+    )
+    if not rl_key.allowed:
+        await _write_throttled(
+            telemetry, resolved_key, svc, body, tool_label,
+            jsonrpc_id, request_id, client_ip,
+        )
+        headers = {"Retry-After": str(rl_key.retry_after_s)} if rl_key.retry_after_s > 0 else {}
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "key rate limit exceeded",
+            headers=headers,
+        )
+
+    rl_svc = await ratelimit.check(
+        f"rl:s:{svc.service_id}", qps=svc.rate_limit_qps
+    )
+    if not rl_svc.allowed:
+        # 注意：此时 key 桶已扣 1 token，不回滚（spec §3.2 决议）
+        await _write_throttled(
+            telemetry, resolved_key, svc, body, tool_label,
+            jsonrpc_id, request_id, client_ip,
+        )
+        headers = {"Retry-After": str(rl_svc.retry_after_s)} if rl_svc.retry_after_s > 0 else {}
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "service rate limit exceeded",
+            headers=headers,
+        )
+
     # 4. forward
     extra = {
         "x-request-id": request_id,
@@ -195,3 +228,35 @@ async def proxy_mcp(
 
     response_obj.headers["x-request-id"] = request_id
     return response_obj
+
+
+async def _write_throttled(
+    telemetry,
+    resolved_key,
+    svc,
+    body: bytes,
+    tool_label: str | None,
+    jsonrpc_id: str | None,
+    request_id: str,
+    client_ip: str | None,
+) -> None:
+    entry = CallLogEntry(
+        api_key_id=resolved_key.api_key_id,
+        application_id=resolved_key.application_id,
+        user_id=resolved_key.user_id,
+        service_id=svc.service_id,
+        service_version=None,
+        tool_name=tool_label,
+        request_id=jsonrpc_id or request_id,
+        status=CallStatus.throttled,
+        http_status=429,
+        error_code="rate_limit_exceeded",
+        error_message=None,
+        duration_ms=0,
+        request_bytes=len(body),
+        response_bytes=0,
+        request_body=_truncate(body, settings.body_log_max_bytes),
+        response_body=None,
+        client_ip=client_ip,
+    )
+    await telemetry.enqueue(entry)
