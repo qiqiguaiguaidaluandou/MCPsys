@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -22,7 +24,7 @@ class PermissionOut(BaseModel):
     application_id: int
     service_id: int
     granted_by: int | None
-    granted_at: str
+    granted_at: datetime
     note: str | None
 
 
@@ -39,17 +41,6 @@ async def _get_service_by_slug(slug: str, db: AsyncSession) -> McpService:
     return svc
 
 
-def _serialize(p: ServicePermission) -> dict:
-    return {
-        "id": p.id,
-        "application_id": p.application_id,
-        "service_id": p.service_id,
-        "granted_by": p.granted_by,
-        "granted_at": p.granted_at.isoformat() if p.granted_at else None,
-        "note": p.note,
-    }
-
-
 @router.post(
     "/api/v1/services/{slug}/permissions",
     response_model=PermissionOut,
@@ -59,7 +50,6 @@ async def grant_permission(
     slug: str,
     payload: PermissionCreate,
     response: Response,
-    request: Request,
     db: AsyncSession = Depends(get_db),
     actor=Depends(get_current_user),
 ) -> PermissionOut:
@@ -79,7 +69,7 @@ async def grant_permission(
     if existing is not None:
         # idempotent: return 200 with the existing row
         response.status_code = status.HTTP_200_OK
-        return PermissionOut.model_validate(_serialize(existing))
+        return PermissionOut.model_validate(existing)
 
     perm = ServicePermission(
         application_id=payload.application_id,
@@ -101,11 +91,11 @@ async def grant_permission(
         )
         existing = res.scalar_one()
         response.status_code = status.HTTP_200_OK
-        return PermissionOut.model_validate(_serialize(existing))
+        return PermissionOut.model_validate(existing)
 
     await db.refresh(perm)
     response.status_code = status.HTTP_201_CREATED
-    return PermissionOut.model_validate(_serialize(perm))
+    return PermissionOut.model_validate(perm)
 
 
 @router.get(
@@ -123,7 +113,7 @@ async def list_service_permissions(
         .order_by(ServicePermission.id)
     )
     rows = res.scalars().all()
-    items = [PermissionOut.model_validate(_serialize(r)) for r in rows]
+    items = [PermissionOut.model_validate(r) for r in rows]
     return PermissionList(items=items, total=len(items))
 
 
@@ -163,5 +153,5 @@ async def list_application_permissions(
         .order_by(ServicePermission.id)
     )
     rows = res.scalars().all()
-    items = [PermissionOut.model_validate(_serialize(r)) for r in rows]
+    items = [PermissionOut.model_validate(r) for r in rows]
     return PermissionList(items=items, total=len(items))

@@ -161,3 +161,18 @@ async def test_grant_unknown_service_is_404(client, admin, app_row):
         json={"application_id": app_row.id},
     )
     assert resp.status_code == 404
+
+
+async def test_viewer_can_read_permissions(client, admin, viewer, app_row, svc_row):
+    # admin grants, viewer reads
+    await client.post(
+        f"/api/v1/services/{svc_row.slug}/permissions",
+        headers=auth_header(admin),
+        json={"application_id": app_row.id},
+    )
+    resp = await client.get(
+        f"/api/v1/services/{svc_row.slug}/permissions",
+        headers=auth_header(viewer),
+    )
+    assert resp.status_code == 200
+    assert any(it["application_id"] == app_row.id for it in resp.json()["items"])
