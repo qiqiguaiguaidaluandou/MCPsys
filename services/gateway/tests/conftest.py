@@ -56,6 +56,7 @@ async def app(engine, session_factory, redis_url):
 
     from gateway.main import app as fastapi_app
     from gateway.policy import PolicyCache
+    from gateway.ratelimit import TokenBucket
     from gateway.resolver import ServiceResolver
     from gateway.telemetry import TelemetryWriter
 
@@ -64,6 +65,7 @@ async def app(engine, session_factory, redis_url):
     fastapi_app.state.http = httpx.AsyncClient()
     fastapi_app.state.redis = Redis.from_url(redis_url, decode_responses=True)
     await fastapi_app.state.redis.flushdb()
+    fastapi_app.state.ratelimit = TokenBucket(fastapi_app.state.redis)
     fastapi_app.state.resolver = ServiceResolver(session_factory=session_factory, ttl_seconds=60)
     fastapi_app.state.policy = PolicyCache(session_factory=session_factory, ttl_seconds=30)
     fastapi_app.state.telemetry = TelemetryWriter(
@@ -80,3 +82,13 @@ async def client(app) -> AsyncIterator[AsyncClient]:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
     await app.state.http.aclose()
+
+
+@pytest.fixture
+async def redis_client(redis_url):
+    from redis.asyncio import Redis
+
+    r = Redis.from_url(redis_url, decode_responses=True)
+    await r.flushdb()
+    yield r
+    await r.aclose()

@@ -19,10 +19,16 @@ const stage = ref<'form' | 'plaintext'>('form');
 const submitting = ref(false);
 const apps = ref<Application[]>([]);
 
-const form = reactive<{ name: string; owner_type: OwnerType; owner_id: number | null }>({
+const form = reactive<{
+  name: string;
+  owner_type: OwnerType;
+  owner_id: number | null;
+  rate_limit_qps: number | null;
+}>({
   name: '',
   owner_type: 'application',
   owner_id: null,
+  rate_limit_qps: null,
 });
 
 const result = ref<{ plaintext: string; prefix: string } | null>(null);
@@ -33,6 +39,7 @@ watch(() => props.modelValue, async (v) => {
     form.name = '';
     form.owner_type = 'application';
     form.owner_id = props.defaultApplicationId ?? null;
+    form.rate_limit_qps = null;
     result.value = null;
     apps.value = (await listApplications()).items;
   }
@@ -49,6 +56,7 @@ async function onSubmit() {
       name: form.name,
       owner_type: form.owner_type,
       owner_id: form.owner_id,
+      rate_limit_qps: form.rate_limit_qps,
     });
     result.value = { plaintext: resp.plaintext, prefix: resp.key_prefix };
     stage.value = 'plaintext';
@@ -103,6 +111,16 @@ function selectAll(e: MouseEvent) {
         </el-form-item>
         <el-form-item v-else label="用户 ID" required>
           <el-input-number v-model="form.owner_id" :min="1" style="width: 200px;" />
+        </el-form-item>
+        <el-form-item label="QPS 限流">
+          <el-input-number
+            v-model="form.rate_limit_qps"
+            :min="0"
+            :controls="false"
+            placeholder="不限"
+            style="width: 200px;"
+          />
+          <span class="qps-hint">留空 = 不限；0 = 停用；正整数 = 每秒上限</span>
         </el-form-item>
       </el-form>
     </template>
@@ -175,6 +193,11 @@ function selectAll(e: MouseEvent) {
   margin-top: var(--space-2);
 }
 .plaintext-hint {
+  font-size: var(--text-xs);
+  color: var(--color-gray-500);
+}
+.qps-hint {
+  margin-left: var(--space-3);
   font-size: var(--text-xs);
   color: var(--color-gray-500);
 }

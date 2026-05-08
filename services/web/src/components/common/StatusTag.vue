@@ -11,12 +11,15 @@ const TYPE_MAP: Record<string, 'success' | 'info' | 'warning' | 'danger'> = {
   disabled: 'info',  unknown: 'info',
   unhealthy: 'danger', revoked: 'danger', error: 'danger',
   warning: 'warning',
+  denied: 'danger',
+  throttled: 'warning',
 };
 
 const LABEL_MAP: Record<string, string> = {
   active: '启用', disabled: '禁用',
   healthy: '健康', unhealthy: '异常', unknown: '未知',
   revoked: '已吊销', error: '错误', success: '成功',
+  timeout: '超时', denied: '拒绝', throttled: '限流',
 };
 
 const tagType = computed(() => TYPE_MAP[props.status] ?? 'info');

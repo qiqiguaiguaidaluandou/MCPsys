@@ -26,6 +26,7 @@ class ResolvedKey:
     api_key_id: int
     application_id: int | None
     user_id: int | None
+    rate_limit_qps: int | None = None
 
 
 def _extract_prefix(plaintext: str) -> str:
@@ -79,6 +80,7 @@ async def validate_api_key(
                 api_key_id=data["api_key_id"],
                 application_id=data.get("application_id"),
                 user_id=data.get("user_id"),
+                rate_limit_qps=data.get("rate_limit_qps"),
             )
         # Different plaintext within the same prefix bucket — fall through to DB.
 
@@ -112,6 +114,7 @@ async def validate_api_key(
         "digest": _plaintext_digest(plaintext),
         "application_id": application_id,
         "user_id": user_id,
+        "rate_limit_qps": matched.rate_limit_qps,
         "expires_at": matched.expires_at.isoformat() if matched.expires_at else None,
     }
     # If the key expires within the normal TTL window, shorten the cache lifetime so the
@@ -127,4 +130,5 @@ async def validate_api_key(
         api_key_id=matched.id,
         application_id=application_id,
         user_id=user_id,
+        rate_limit_qps=matched.rate_limit_qps,
     )

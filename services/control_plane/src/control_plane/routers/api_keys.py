@@ -18,6 +18,7 @@ class ApiKeyCreate(BaseModel):
     owner_type: ApiKeyOwnerType
     owner_id: int
     expires_at: datetime | None = None
+    rate_limit_qps: int | None = Field(default=None, ge=0)
 
 
 class ApiKeyCreated(BaseModel):
@@ -38,6 +39,11 @@ class ApiKeyOut(BaseModel):
     last_used_at: datetime | None
     revoked_at: datetime | None
     created_at: datetime
+    rate_limit_qps: int | None
+
+
+class ApiKeyUpdate(BaseModel):
+    rate_limit_qps: int | None = None
 
 
 class ApiKeyList(BaseModel):
@@ -70,6 +76,7 @@ async def create_api_key(payload: ApiKeyCreate, db: AsyncSession = Depends(get_d
         owner_type=payload.owner_type,
         owner_id=payload.owner_id,
         expires_at=payload.expires_at,
+        rate_limit_qps=payload.rate_limit_qps,
     )
     db.add(key)
     await db.flush()
@@ -118,3 +125,26 @@ async def delete_api_key_permanent(key_id: int, db: AsyncSession = Depends(get_d
     await db.delete(key)
     await db.flush()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.patch(
+    "/{key_id}",
+    response_model=ApiKeyOut,
+    dependencies=[Depends(require_role("admin", "operator"))],
+)
+async def update_api_key(
+    key_id: int,
+    payload: ApiKeyUpdate,
+    db: AsyncSession = Depends(get_db),
+) -> ApiKeyOut:
+    res = await db.execute(select(ApiKey).where(ApiKey.id == key_id))
+    key = res.scalar_one_or_none()
+    if key is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "api key not found")
+
+    data = payload.model_dump(exclude_unset=True)
+    for k, v in data.items():
+        setattr(key, k, v)
+    await db.flush()
+    await db.refresh(key)
+    return ApiKeyOut.model_validate(key)

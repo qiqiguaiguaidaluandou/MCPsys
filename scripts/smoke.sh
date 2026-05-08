@@ -53,6 +53,31 @@ curl -fsS -X POST "$BASE/mcp/smoke-svc" \
     -H "Authorization: Bearer $APIKEY" -H "content-type: application/json" \
     -d '{"jsonrpc":"2.0","method":"tools/list","id":1}' >/dev/null
 
+echo "[smoke] set service rate_limit_qps=1"
+curl -fsS -X PATCH "$BASE/api/v1/services/smoke-svc" \
+    -H "Authorization: Bearer $TOKEN" -H "content-type: application/json" \
+    -d '{"rate_limit_qps":1}' >/dev/null
+
+echo "[smoke] burst 3 — expect at least one 429"
+SUCC=0; THR=0
+for i in 1 2 3; do
+    H=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/mcp/smoke-svc" \
+        -H "Authorization: Bearer $APIKEY" -H "content-type: application/json" \
+        -d '{"jsonrpc":"2.0","method":"tools/list","id":'$i'}')
+    case $H in
+        200) SUCC=$((SUCC+1));;
+        429) THR=$((THR+1));;
+        *) echo "unexpected $H"; exit 1;;
+    esac
+done
+echo "200=$SUCC 429=$THR"
+test "$THR" -ge 1 || { echo "expected at least 1 throttled"; exit 1; }
+
+echo "[smoke] reset rate_limit_qps to null"
+curl -fsS -X PATCH "$BASE/api/v1/services/smoke-svc" \
+    -H "Authorization: Bearer $TOKEN" -H "content-type: application/json" \
+    -d '{"rate_limit_qps":null}' >/dev/null
+
 echo "[smoke] query call logs"
 curl -fsS "$BASE/api/v1/call-logs?limit=5" \
     -H "Authorization: Bearer $TOKEN" | python -m json.tool | head -20

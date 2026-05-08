@@ -2,7 +2,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { getService, type McpService } from '@/api/services';
+import { getService, updateService, type McpService } from '@/api/services';
 import { listApplications, type Application } from '@/api/applications';
 import {
   listServicePermissions,
@@ -36,7 +36,32 @@ const grantForm = ref<{ application_id: number | null; note: string }>({
 });
 const granting = ref(false);
 
+const qpsDraft = ref<number | null>(null);
+const qpsSaving = ref(false);
+
 const canEdit = computed(() => auth.hasRole('admin', 'operator'));
+
+function formatQps(qps: number | null | undefined): string {
+  if (qps === null || qps === undefined) return '不限';
+  if (qps === 0) return '停用 (0)';
+  return `${qps} QPS`;
+}
+
+async function onSaveQps() {
+  if (!service.value) return;
+  qpsSaving.value = true;
+  try {
+    await updateService(service.value.slug, { rate_limit_qps: qpsDraft.value });
+    ElMessage.success('已保存');
+    await load();
+  } finally {
+    qpsSaving.value = false;
+  }
+}
+
+function clearQpsDraft() {
+  qpsDraft.value = null;
+}
 
 const availableApps = computed(() => {
   const granted = new Set(permissions.value.map((p) => p.application_id));
@@ -105,6 +130,7 @@ async function load() {
   loading.value = true;
   try {
     service.value = await getService(Number(route.params.id));
+    qpsDraft.value = service.value.rate_limit_qps;
     await Promise.all([reloadPermissions(), reloadApps()]);
   } finally {
     loading.value = false;
@@ -148,6 +174,33 @@ onMounted(load);
           <div class="overview__row">
             <div class="overview__label">所属团队</div>
             <div class="overview__value">{{ service.owner_team || '—' }}</div>
+          </div>
+          <div class="overview__row">
+            <div class="overview__label">QPS 限流</div>
+            <div class="overview__value">
+              <template v-if="canEdit">
+                <div class="qps-edit">
+                  <el-input-number
+                    v-model="qpsDraft"
+                    :min="0"
+                    :controls="false"
+                    placeholder="不限"
+                    style="width: 140px;"
+                  />
+                  <el-button
+                    type="primary"
+                    size="small"
+                    :loading="qpsSaving"
+                    @click="onSaveQps"
+                  >保存</el-button>
+                  <el-button link type="primary" size="small" @click="clearQpsDraft">不限</el-button>
+                  <span class="qps-edit__current">当前：{{ formatQps(service.rate_limit_qps) }}</span>
+                </div>
+              </template>
+              <template v-else>
+                {{ formatQps(service.rate_limit_qps) }}
+              </template>
+            </div>
           </div>
           <div class="overview__row">
             <div class="overview__label">描述</div>
@@ -291,5 +344,15 @@ onMounted(load);
   font-size: var(--text-base);
   font-weight: 500;
   color: var(--color-gray-800);
+}
+.qps-edit {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.qps-edit__current {
+  margin-left: var(--space-2);
+  color: var(--color-gray-500);
+  font-size: var(--text-xs);
 }
 </style>

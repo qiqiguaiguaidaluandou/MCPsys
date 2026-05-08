@@ -17,6 +17,7 @@ class ResolvedService:
     slug: str
     endpoint_url: str
     transport: str
+    rate_limit_qps: int | None = None
 
 
 class ServiceResolver:
@@ -56,6 +57,7 @@ class ServiceResolver:
             slug=svc.slug,
             endpoint_url=svc.endpoint_url,
             transport=svc.transport.value,
+            rate_limit_qps=svc.rate_limit_qps,
         )
         self._cache[slug] = (now + self._ttl, info)
         return info
