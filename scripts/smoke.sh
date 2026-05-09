@@ -37,6 +37,10 @@ APIKEY=$(curl -fsS -X POST "$BASE/api/v1/api-keys" \
     | python -c "import sys,json; print(json.load(sys.stdin)['plaintext'])")
 echo "got api key: ${APIKEY:0:12}..."
 
+echo "[smoke] (idempotent) revoke any leftover grant from prior runs"
+curl -fsS -X DELETE "$BASE/api/v1/services/smoke-svc/permissions/$APP_ID" \
+    -H "Authorization: Bearer $TOKEN" >/dev/null
+
 echo "[smoke] (negative) call before grant — expect 403"
 HTTP=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$BASE/mcp/smoke-svc" \
     -H "Authorization: Bearer $APIKEY" -H "content-type: application/json" \
