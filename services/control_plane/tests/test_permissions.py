@@ -269,6 +269,49 @@ async def test_revoke_publishes_policy_invalidate(
         await sub.aclose()
 
 
+async def test_grant_publish_happens_after_commit(
+    client, admin, app_row, svc_row, redis_url, session_factory
+):
+    """Regression: publish must happen *after* the transaction commits, so a
+    listener that reloads from a fresh DB connection sees the new row.
+    A pre-fix bug published inside the open transaction; another connection
+    reloading immediately would miss the row and stay 'denied'."""
+    sub = Redis.from_url(redis_url, decode_responses=True)
+    try:
+        async with sub.pubsub() as ps:
+            await ps.subscribe("policy:invalidate")
+            await asyncio.sleep(0.05)
+
+            resp = await client.post(
+                f"/api/v1/services/{svc_row.slug}/permissions",
+                headers=auth_header(admin),
+                json={"application_id": app_row.id},
+            )
+            assert resp.status_code == 201
+
+            # Wait for the broadcast — proxy for "publish has happened".
+            assert await _drain(ps, str(svc_row.id))
+
+            # Publish is post-commit ⇒ a *fresh* session must see the row now.
+            from mcpsys_shared.models import ServicePermission
+            from sqlalchemy import select
+
+            async with session_factory() as fresh:
+                rows = (
+                    await fresh.execute(
+                        select(ServicePermission).where(
+                            ServicePermission.application_id == app_row.id,
+                            ServicePermission.service_id == svc_row.id,
+                        )
+                    )
+                ).scalars().all()
+            assert len(rows) == 1, (
+                "broadcast was published before commit — fresh reader missed the row"
+            )
+    finally:
+        await sub.aclose()
+
+
 async def test_revoke_missing_grant_does_not_publish(
     client, admin, app_row, svc_row, redis_url
 ):

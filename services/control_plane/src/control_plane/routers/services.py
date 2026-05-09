@@ -1,6 +1,6 @@
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
 from mcpsys_shared.models import (
     HealthStatus,
     McpService,
@@ -128,6 +128,7 @@ async def get_service(slug: str, db: AsyncSession = Depends(get_db)) -> ServiceO
 async def update_service(
     slug: str,
     payload: ServiceUpdate,
+    background: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     redis: Redis | None = Depends(get_redis),
 ) -> ServiceOut:
@@ -142,7 +143,7 @@ async def update_service(
     for k, v in data.items():
         setattr(svc, k, v)
     await db.flush()
-    await publish_service_invalidate(redis, svc.slug)
+    background.add_task(publish_service_invalidate, redis, svc.slug)
     return ServiceOut.model_validate(svc)
 
 
@@ -153,6 +154,7 @@ async def update_service(
 )
 async def delete_service(
     slug: str,
+    background: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     redis: Redis | None = Depends(get_redis),
 ) -> Response:
@@ -164,5 +166,5 @@ async def delete_service(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "service not found")
     svc.status = ServiceStatus.disabled
     await db.flush()
-    await publish_service_invalidate(redis, svc.slug)
+    background.add_task(publish_service_invalidate, redis, svc.slug)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
