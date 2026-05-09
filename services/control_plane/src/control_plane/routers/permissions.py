@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from mcpsys_shared.models import Application, McpService, ServicePermission
 from pydantic import BaseModel, ConfigDict
 from redis.asyncio import Redis
@@ -51,7 +51,6 @@ async def grant_permission(
     slug: str,
     payload: PermissionCreate,
     response: Response,
-    background: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     actor=Depends(get_current_user),
     redis: Redis | None = Depends(get_redis),
@@ -97,7 +96,9 @@ async def grant_permission(
         return PermissionOut.model_validate(existing)
 
     await db.refresh(perm)
-    background.add_task(publish_policy_invalidate, redis, svc.id)
+    # commit before publish so the listener-side reload sees the new row
+    await db.commit()
+    await publish_policy_invalidate(redis, svc.id)
     response.status_code = status.HTTP_201_CREATED
     return PermissionOut.model_validate(perm)
 
@@ -129,7 +130,6 @@ async def list_service_permissions(
 async def revoke_permission(
     slug: str,
     application_id: int,
-    background: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     redis: Redis | None = Depends(get_redis),
 ) -> Response:
@@ -144,7 +144,8 @@ async def revoke_permission(
     if row is not None:
         await db.delete(row)
         await db.flush()
-        background.add_task(publish_policy_invalidate, redis, svc.id)
+        await db.commit()
+        await publish_policy_invalidate(redis, svc.id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
