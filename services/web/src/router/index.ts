@@ -31,7 +31,7 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, layout: 'app', title: 'nav.serviceList' },
   },
   {
-    path: '/services/:id',
+    path: '/services/:slug',
     name: 'ServiceDetail',
     component: () => import('@/views/services/ServiceDetailPage.vue'),
     meta: { requiresAuth: true, layout: 'app' },

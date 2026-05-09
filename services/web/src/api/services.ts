@@ -26,8 +26,8 @@ export function listServices(): Promise<PaginatedList<McpService>> {
   return client.get('/api/v1/services').then((r) => r.data);
 }
 
-export function getService(id: number): Promise<McpService> {
-  return client.get(`/api/v1/services/${id}`).then((r) => r.data);
+export function getService(slug: string): Promise<McpService> {
+  return client.get(`/api/v1/services/${slug}`).then((r) => r.data);
 }
 
 export interface CreateServicePayload {
@@ -56,6 +56,6 @@ export function updateService(slug: string, payload: UpdateServicePayload): Prom
   return client.patch(`/api/v1/services/${slug}`, payload).then((r) => r.data);
 }
 
-export function disableService(id: number): Promise<void> {
-  return client.delete(`/api/v1/services/${id}`).then(() => undefined);
+export function disableService(slug: string): Promise<void> {
+  return client.delete(`/api/v1/services/${slug}`).then(() => undefined);
 }

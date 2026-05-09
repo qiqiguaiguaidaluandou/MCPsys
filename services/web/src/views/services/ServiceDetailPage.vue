@@ -129,7 +129,7 @@ async function onRevoke(applicationId: number) {
 async function load() {
   loading.value = true;
   try {
-    service.value = await getService(Number(route.params.id));
+    service.value = await getService(String(route.params.slug));
     qpsDraft.value = service.value.rate_limit_qps;
     await Promise.all([reloadPermissions(), reloadApps()]);
   } finally {

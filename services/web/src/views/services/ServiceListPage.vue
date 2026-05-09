@@ -79,7 +79,7 @@ onMounted(load);
   <DataTable :data="filtered" :loading="loading">
     <el-table-column prop="slug" label="Slug" width="200">
       <template #default="{ row }: { row: McpService }">
-        <span class="mono"><router-link :to="`/services/${row.id}`">{{ row.slug }}</router-link></span>
+        <span class="mono"><router-link :to="`/services/${row.slug}`">{{ row.slug }}</router-link></span>
       </template>
     </el-table-column>
     <el-table-column prop="display_name" label="显示名" width="240" />
