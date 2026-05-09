@@ -1,19 +1,20 @@
 import re
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from mcpsys_shared.models import (
     HealthStatus,
     McpService,
     ServiceStatus,
     TransportType,
 )
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
+from redis.asyncio import Redis
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..deps import get_db, require_role
+from ..deps import get_db, get_redis, require_role
+from ..invalidator import publish_service_invalidate
 
 router = APIRouter(prefix="/api/v1/services", tags=["services"])
 
@@ -125,7 +126,10 @@ async def get_service(slug: str, db: AsyncSession = Depends(get_db)) -> ServiceO
     dependencies=[Depends(require_role("admin", "operator"))],
 )
 async def update_service(
-    slug: str, payload: ServiceUpdate, db: AsyncSession = Depends(get_db)
+    slug: str,
+    payload: ServiceUpdate,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis | None = Depends(get_redis),
 ) -> ServiceOut:
     res = await db.execute(select(McpService).where(McpService.slug == slug))
     svc = res.scalar_one_or_none()
@@ -138,6 +142,7 @@ async def update_service(
     for k, v in data.items():
         setattr(svc, k, v)
     await db.flush()
+    await publish_service_invalidate(redis, svc.slug)
     return ServiceOut.model_validate(svc)
 
 
@@ -146,7 +151,11 @@ async def update_service(
     status_code=status.HTTP_204_NO_CONTENT,
     dependencies=[Depends(require_role("admin"))],
 )
-async def delete_service(slug: str, db: AsyncSession = Depends(get_db)) -> Response:
+async def delete_service(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis | None = Depends(get_redis),
+) -> Response:
     """Soft-delete: mark status=disabled. Preserves call_logs history and the slug → name
     mapping the dashboard joins on. Hard delete via SQL if you really need it."""
     res = await db.execute(select(McpService).where(McpService.slug == slug))
@@ -155,4 +164,5 @@ async def delete_service(slug: str, db: AsyncSession = Depends(get_db)) -> Respo
         raise HTTPException(status.HTTP_404_NOT_FOUND, "service not found")
     svc.status = ServiceStatus.disabled
     await db.flush()
+    await publish_service_invalidate(redis, svc.slug)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

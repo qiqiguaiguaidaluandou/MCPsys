@@ -2,11 +2,11 @@ from collections.abc import AsyncIterator
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
-from testcontainers.postgres import PostgresContainer
-
 from mcpsys_shared.db import make_engine, make_session_factory
 from mcpsys_shared.models import Base
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
+from testcontainers.postgres import PostgresContainer
+from testcontainers.redis import RedisContainer
 
 
 @pytest.fixture(scope="session")
@@ -14,6 +14,14 @@ def pg_url() -> AsyncIterator[str]:
     with PostgresContainer("postgres:16-alpine") as pg:
         url = pg.get_connection_url().replace("postgresql+psycopg2", "postgresql+asyncpg")
         yield url
+
+
+@pytest.fixture(scope="session")
+def redis_url() -> AsyncIterator[str]:
+    with RedisContainer("redis:7-alpine") as r:
+        host = r.get_container_host_ip()
+        port = r.get_exposed_port(6379)
+        yield f"redis://{host}:{port}/0"
 
 
 @pytest.fixture(scope="session")
@@ -41,11 +49,22 @@ async def _clean_db(engine):
 
 
 @pytest.fixture
-async def app(engine, session_factory):
+async def redis_client(redis_url):
+    from redis.asyncio import Redis
+
+    r = Redis.from_url(redis_url, decode_responses=True)
+    await r.flushdb()
+    yield r
+    await r.aclose()
+
+
+@pytest.fixture
+async def app(engine, session_factory, redis_client):
     from control_plane.main import app as fastapi_app
 
     fastapi_app.state.engine = engine
     fastapi_app.state.session_factory = session_factory
+    fastapi_app.state.redis = redis_client
     return fastapi_app
 
 

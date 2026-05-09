@@ -1,14 +1,15 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from mcpsys_shared.models import Application, McpService, ServicePermission
 from pydantic import BaseModel, ConfigDict
+from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from mcpsys_shared.models import Application, McpService, ServicePermission
-
-from ..deps import get_current_user, get_db, require_role
+from ..deps import get_current_user, get_db, get_redis, require_role
+from ..invalidator import publish_policy_invalidate
 
 router = APIRouter(tags=["permissions"])
 
@@ -52,6 +53,7 @@ async def grant_permission(
     response: Response,
     db: AsyncSession = Depends(get_db),
     actor=Depends(get_current_user),
+    redis: Redis | None = Depends(get_redis),
 ) -> PermissionOut:
     svc = await _get_service_by_slug(slug, db)
 
@@ -94,6 +96,7 @@ async def grant_permission(
         return PermissionOut.model_validate(existing)
 
     await db.refresh(perm)
+    await publish_policy_invalidate(redis, svc.id)
     response.status_code = status.HTTP_201_CREATED
     return PermissionOut.model_validate(perm)
 
@@ -123,7 +126,10 @@ async def list_service_permissions(
     dependencies=[Depends(require_role("admin", "operator"))],
 )
 async def revoke_permission(
-    slug: str, application_id: int, db: AsyncSession = Depends(get_db)
+    slug: str,
+    application_id: int,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis | None = Depends(get_redis),
 ) -> Response:
     svc = await _get_service_by_slug(slug, db)
     res = await db.execute(
@@ -136,6 +142,7 @@ async def revoke_permission(
     if row is not None:
         await db.delete(row)
         await db.flush()
+        await publish_policy_invalidate(redis, svc.id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

@@ -1,9 +1,10 @@
+import asyncio
+
 import pytest
-
-from mcpsys_shared.models import User, UserRole, UserStatus
-
 from control_plane.security import encode_jwt, hash_password
 from control_plane.settings import settings
+from mcpsys_shared.models import User, UserRole, UserStatus
+from redis.asyncio import Redis
 
 
 @pytest.fixture
@@ -149,3 +150,58 @@ async def test_patch_qps_to_zero_blocks(client, admin):
     )
     assert resp.status_code == 200
     assert resp.json()["rate_limit_qps"] == 0
+
+
+async def _drain(pubsub, expected_data: str, timeout: float = 2.0) -> bool:
+    deadline = asyncio.get_event_loop().time() + timeout
+    while asyncio.get_event_loop().time() < deadline:
+        msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=0.1)
+        if msg is not None and msg.get("data") == expected_data:
+            return True
+    return False
+
+
+async def test_patch_publishes_service_invalidate(client, admin, redis_url):
+    await client.post(
+        "/api/v1/services",
+        headers=auth_header(admin),
+        json={"slug": "broadcast", "display_name": "B", "endpoint_url": "http://b/mcp"},
+    )
+    sub = Redis.from_url(redis_url, decode_responses=True)
+    try:
+        async with sub.pubsub() as ps:
+            await ps.subscribe("service:invalidate")
+            await asyncio.sleep(0.05)
+
+            resp = await client.patch(
+                "/api/v1/services/broadcast",
+                headers=auth_header(admin),
+                json={"endpoint_url": "http://b2/mcp"},
+            )
+            assert resp.status_code == 200
+
+            assert await _drain(ps, "broadcast")
+    finally:
+        await sub.aclose()
+
+
+async def test_delete_publishes_service_invalidate(client, admin, redis_url):
+    await client.post(
+        "/api/v1/services",
+        headers=auth_header(admin),
+        json={"slug": "byebye", "display_name": "B", "endpoint_url": "http://b/mcp"},
+    )
+    sub = Redis.from_url(redis_url, decode_responses=True)
+    try:
+        async with sub.pubsub() as ps:
+            await ps.subscribe("service:invalidate")
+            await asyncio.sleep(0.05)
+
+            resp = await client.delete(
+                "/api/v1/services/byebye", headers=auth_header(admin)
+            )
+            assert resp.status_code == 204
+
+            assert await _drain(ps, "byebye")
+    finally:
+        await sub.aclose()

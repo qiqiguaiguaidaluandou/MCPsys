@@ -23,8 +23,9 @@ class ResolvedService:
 class ServiceResolver:
     """Slug → service info, with simple per-process TTL cache.
 
-    External invalidation should call `invalidate(slug)` (driven by control plane
-    via redis pub/sub in a future task)."""
+    External invalidation: control plane publishes on the `service:invalidate`
+    redis channel; `gateway.invalidator.InvalidationListener` dispatches to
+    `invalidate(slug=...)` here."""
 
     def __init__(
         self, *, session_factory: async_sessionmaker[AsyncSession], ttl_seconds: int = 60

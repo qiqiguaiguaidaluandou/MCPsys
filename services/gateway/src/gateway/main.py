@@ -2,10 +2,10 @@ from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI
+from mcpsys_shared.db import make_engine, make_session_factory
 from redis.asyncio import Redis
 
-from mcpsys_shared.db import make_engine, make_session_factory
-
+from .invalidator import InvalidationListener
 from .policy import PolicyCache
 from .ratelimit import TokenBucket
 from .resolver import ServiceResolver
@@ -38,9 +38,16 @@ async def lifespan(app: FastAPI):
         flush_interval=settings.telemetry_flush_interval_seconds,
     )
     await app.state.telemetry.start()
+    app.state.invalidator = InvalidationListener(
+        redis=app.state.redis,
+        policy=app.state.policy,
+        resolver=app.state.resolver,
+    )
+    await app.state.invalidator.start()
     try:
         yield
     finally:
+        await app.state.invalidator.stop()
         await app.state.telemetry.stop()
         await app.state.http.aclose()
         await app.state.redis.aclose()

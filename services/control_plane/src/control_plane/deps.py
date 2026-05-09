@@ -3,15 +3,19 @@ from collections.abc import AsyncIterator
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
+from mcpsys_shared.models import User, UserStatus
+from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from mcpsys_shared.models import User, UserStatus
 
 from .security import decode_jwt
 from .settings import settings
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
+
+
+def get_redis(request: Request) -> Redis | None:
+    return getattr(request.app.state, "redis", None)
 
 
 async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
