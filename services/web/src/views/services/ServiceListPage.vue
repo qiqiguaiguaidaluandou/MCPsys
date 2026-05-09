@@ -104,7 +104,7 @@ onMounted(load);
     </el-table-column>
     <el-table-column label="操作" width="80" fixed="right">
       <template #default="{ row }: { row: McpService }">
-        <el-button link type="primary" @click="router.push(`/services/${row.id}`)">详情</el-button>
+        <el-button link type="primary" @click="router.push(`/services/${row.slug}`)">详情</el-button>
       </template>
     </el-table-column>
   </DataTable>
