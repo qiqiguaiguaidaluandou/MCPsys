@@ -16,14 +16,8 @@ export function createUser(payload: CreateUserPayload): Promise<User> {
   return client.post('/api/v1/users', payload).then((r) => r.data);
 }
 
-export interface UpdateUserPayload {
-  role?: Role;
-  status?: UserStatus;
-  password?: string;
-}
-
-export function updateUser(id: number, payload: UpdateUserPayload): Promise<User> {
-  return client.put(`/api/v1/users/${id}`, payload).then((r) => r.data);
+export function changeUserPassword(id: number, password: string): Promise<User> {
+  return client.put(`/api/v1/users/${id}`, { password }).then((r) => r.data);
 }
 
 export function deleteUser(id: number): Promise<void> {

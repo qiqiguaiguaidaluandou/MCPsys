@@ -122,3 +122,58 @@ async def test_delete_user_with_applications_conflict(client, admin, viewer, ses
         headers=auth_header(admin),
     )
     assert resp.status_code == 409
+
+
+async def test_change_own_password_as_viewer(client, viewer):
+    resp = await client.put(
+        f"/api/v1/users/{viewer.id}",
+        headers=auth_header(viewer),
+        json={"password": "newpass1234"},
+    )
+    assert resp.status_code == 200
+    login = await client.post(
+        "/api/v1/auth/login",
+        data={"username": "viewer", "password": "newpass1234"},
+    )
+    assert login.status_code == 200
+
+
+async def test_admin_changes_other_user_password(client, admin, viewer):
+    resp = await client.put(
+        f"/api/v1/users/{viewer.id}",
+        headers=auth_header(admin),
+        json={"password": "resetpass99"},
+    )
+    assert resp.status_code == 200
+    login = await client.post(
+        "/api/v1/auth/login",
+        data={"username": "viewer", "password": "resetpass99"},
+    )
+    assert login.status_code == 200
+
+
+async def test_viewer_change_other_password_forbidden(client, admin, viewer):
+    resp = await client.put(
+        f"/api/v1/users/{admin.id}",
+        headers=auth_header(viewer),
+        json={"password": "hijacked123"},
+    )
+    assert resp.status_code == 403
+
+
+async def test_change_password_too_short(client, admin, viewer):
+    resp = await client.put(
+        f"/api/v1/users/{viewer.id}",
+        headers=auth_header(admin),
+        json={"password": "short"},
+    )
+    assert resp.status_code == 422
+
+
+async def test_change_password_nonexistent_user(client, admin):
+    resp = await client.put(
+        "/api/v1/users/999999",
+        headers=auth_header(admin),
+        json={"password": "anything12"},
+    )
+    assert resp.status_code == 404

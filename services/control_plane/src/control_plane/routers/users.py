@@ -33,6 +33,10 @@ class UserList(BaseModel):
     total: int
 
 
+class UserUpdate(BaseModel):
+    password: str = Field(min_length=8, max_length=128)
+
+
 @router.post(
     "",
     response_model=UserOut,
@@ -63,6 +67,23 @@ async def list_users(db: AsyncSession = Depends(get_db)) -> UserList:
     res = await db.execute(select(User).order_by(User.id))
     users = res.scalars().all()
     return UserList(items=[UserOut.model_validate(u) for u in users], total=len(users))
+
+
+@router.put("/{user_id}", response_model=UserOut)
+async def update_user(
+    user_id: int,
+    payload: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> UserOut:
+    if user_id != current_user.id and current_user.role != UserRole.admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "无权修改其他用户")
+    user = await db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "用户不存在")
+    user.password_hash = hash_password(payload.password)
+    await db.flush()
+    return UserOut.model_validate(user)
 
 
 @router.delete(

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useAuthStore } from '@/stores/auth';
-import { updateUser } from '@/api/users';
+import { changeUserPassword } from '@/api/users';
 import PageHeader from '@/components/common/PageHeader.vue';
 import { ROLE_LABELS } from '@/utils/constants';
 import { ElMessage } from 'element-plus';
@@ -29,7 +29,7 @@ async function changePassword() {
   if (!auth.user) return;
   saving.value = true;
   try {
-    await updateUser(auth.user.id, { password: newPassword.value });
+    await changeUserPassword(auth.user.id, newPassword.value);
     ElMessage.success('密码修改成功，请重新登录');
     auth.clear();
     location.assign('/login');
