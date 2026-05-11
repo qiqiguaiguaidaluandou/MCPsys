@@ -10,13 +10,14 @@ import StatusTag from '@/components/common/StatusTag.vue';
 import RelativeTime from '@/components/common/RelativeTime.vue';
 import Icon from '@/components/icons/Icon.vue';
 import { ROLE_LABELS } from '@/utils/constants';
-import { ElMessage } from 'element-plus';
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
 
 const router = useRouter();
 const auth = useAuthStore();
 const items = ref<User[]>([]);
 const loading = ref(false);
 
+const formRef = ref<FormInstance>();
 const newDialog = reactive<{
   visible: boolean;
   submitting: boolean;
@@ -26,6 +27,18 @@ const newDialog = reactive<{
   submitting: false,
   form: { username: '', password: '', role: 'viewer', status: 'active' },
 });
+
+const rules: FormRules = {
+  username: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { min: 3, max: 64, message: '用户名长度需在 3–64 个字符', trigger: 'blur' },
+  ],
+  password: [
+    { required: true, message: '请输入初始密码', trigger: 'blur' },
+    { min: 8, max: 128, message: '密码长度需在 8–128 个字符', trigger: 'blur' },
+  ],
+  role: [{ required: true, message: '请选择角色', trigger: 'change' }],
+};
 
 async function load() {
   loading.value = true;
@@ -37,8 +50,10 @@ async function load() {
 }
 
 async function onCreate() {
-  if (!newDialog.form.username || !newDialog.form.password) {
-    ElMessage.warning('请填写用户名和密码');
+  if (!formRef.value) return;
+  try {
+    await formRef.value.validate();
+  } catch {
     return;
   }
   newDialog.submitting = true;
@@ -47,6 +62,7 @@ async function onCreate() {
     ElMessage.success('用户创建成功');
     newDialog.visible = false;
     newDialog.form = { username: '', password: '', role: 'viewer', status: 'active' };
+    formRef.value.resetFields();
     await load();
   } finally {
     newDialog.submitting = false;
@@ -92,14 +108,14 @@ onMounted(load);
   </DataTable>
 
   <el-dialog v-model="newDialog.visible" title="新建用户" width="480">
-    <el-form label-position="top">
-      <el-form-item label="用户名" required>
+    <el-form ref="formRef" :model="newDialog.form" :rules="rules" label-position="top">
+      <el-form-item label="用户名" prop="username">
         <el-input v-model="newDialog.form.username" autocomplete="off" />
       </el-form-item>
-      <el-form-item label="初始密码" required>
+      <el-form-item label="初始密码" prop="password">
         <el-input v-model="newDialog.form.password" type="password" show-password autocomplete="new-password" />
       </el-form-item>
-      <el-form-item label="角色">
+      <el-form-item label="角色" prop="role">
         <el-select v-model="newDialog.form.role" style="width: 100%;">
           <el-option label="管理员（admin）" value="admin" />
           <el-option label="运维（operator）" value="operator" />

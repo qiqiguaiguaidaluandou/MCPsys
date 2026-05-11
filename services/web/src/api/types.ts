@@ -15,6 +15,14 @@ export interface PaginatedList<T> {
   total: number;
 }
 
+export interface ApiErrorItem {
+  type?: string;
+  loc?: (string | number)[];
+  msg: string;
+  ctx?: Record<string, unknown>;
+  input?: unknown;
+}
+
 export interface ApiError {
-  detail?: string | { msg: string }[];
+  detail?: string | ApiErrorItem[];
 }

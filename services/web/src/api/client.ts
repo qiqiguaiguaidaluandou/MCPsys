@@ -1,6 +1,8 @@
 import axios, { type AxiosError } from 'axios';
 import { ElMessage } from 'element-plus';
 
+import type { ApiError } from './types';
+
 export const client = axios.create({
   baseURL: '/',
   timeout: 15_000,
@@ -15,14 +17,25 @@ client.interceptors.request.use(async (config) => {
   return config;
 });
 
+export function formatDetail(detail: ApiError['detail']): string {
+  if (typeof detail === 'string') return detail;
+  if (!Array.isArray(detail)) return '';
+  return detail
+    .map((item) => {
+      const loc = Array.isArray(item.loc) ? item.loc.filter((p) => p !== 'body') : [];
+      const field = loc.join('.');
+      return field ? `${field}: ${item.msg}` : item.msg;
+    })
+    .join('；');
+}
+
 client.interceptors.response.use(
   (resp) => resp,
-  async (err: AxiosError<{ detail?: string }>) => {
+  async (err: AxiosError<ApiError>) => {
     const { useAuthStore } = await import('@/stores/auth');
     const auth = useAuthStore();
     const status = err.response?.status;
-    const detail = err.response?.data?.detail;
-    const msg = typeof detail === 'string' ? detail : '';
+    const msg = formatDetail(err.response?.data?.detail);
 
     if (status === 401) {
       auth.clear();
