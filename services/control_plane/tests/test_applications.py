@@ -1,6 +1,7 @@
 import pytest
+from sqlalchemy import select
 
-from mcpsys_shared.models import User, UserRole, UserStatus
+from mcpsys_shared.models import AuditEvent, User, UserRole, UserStatus
 
 from control_plane.security import encode_jwt, hash_password
 from control_plane.settings import settings
@@ -66,3 +67,20 @@ async def test_create_duplicate_name_conflict(client, admin):
         json={"name": "dup-app"},
     )
     assert resp.status_code == 409
+
+
+async def test_audit_application_create(client, admin, session_factory):
+    resp = await client.post(
+        "/api/v1/applications",
+        headers=auth_header(admin),
+        json={"name": "audit-app", "team": "ops"},
+    )
+    assert resp.status_code == 201
+    app_id = resp.json()["id"]
+    async with session_factory() as s:
+        r = (await s.execute(select(AuditEvent).where(AuditEvent.action == "application.create"))).scalar_one()
+    assert r.target_type == "application"
+    assert r.target_id == str(app_id)
+    assert r.before is None
+    assert r.after["name"] == "audit-app"
+    assert r.actor_user_id == admin.id
