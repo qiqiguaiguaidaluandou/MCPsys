@@ -3,8 +3,17 @@ import asyncio
 import pytest
 from control_plane.security import encode_jwt, hash_password
 from control_plane.settings import settings
-from mcpsys_shared.models import Application, McpService, User, UserRole, UserStatus
+from mcpsys_shared.models import (
+    Application,
+    AuditEvent,
+    McpService,
+    ServicePermission,
+    User,
+    UserRole,
+    UserStatus,
+)
 from redis.asyncio import Redis
+from sqlalchemy import select
 
 
 @pytest.fixture
@@ -55,6 +64,33 @@ async def svc_row(session_factory):
         await s.commit()
         await s.refresh(svc)
         return svc
+
+
+# Aliases used by the audit tests below — keep parallel to the conventional names
+# in other test_*.py files (existing_application / existing_service / existing_permission).
+@pytest.fixture
+async def existing_application(app_row):
+    return app_row
+
+
+@pytest.fixture
+async def existing_service(svc_row):
+    return svc_row
+
+
+@pytest.fixture
+async def existing_permission(session_factory, existing_application, existing_service, admin):
+    async with session_factory() as s:
+        perm = ServicePermission(
+            application_id=existing_application.id,
+            service_id=existing_service.id,
+            granted_by=admin.id,
+            note="seed",
+        )
+        s.add(perm)
+        await s.commit()
+        await s.refresh(perm)
+        return perm
 
 
 def auth_header(user):
@@ -331,3 +367,43 @@ async def test_revoke_missing_grant_does_not_publish(
             assert not saw, "revoke of non-existent grant should not publish"
     finally:
         await sub.aclose()
+
+
+async def test_audit_permission_grant(
+    client, admin, existing_application, existing_service, session_factory
+):
+    resp = await client.post(
+        f"/api/v1/services/{existing_service.slug}/permissions",
+        headers=auth_header(admin),
+        json={"application_id": existing_application.id, "note": "for testing"},
+    )
+    assert resp.status_code in (200, 201)
+    async with session_factory() as s:
+        r = (
+            await s.execute(
+                select(AuditEvent).where(AuditEvent.action == "service_permission.grant")
+            )
+        ).scalar_one()
+    assert r.target_type == "service_permission"
+    assert r.before is None
+    assert r.after["application_id"] == existing_application.id
+    assert r.after["service_id"] == existing_service.id
+
+
+async def test_audit_permission_revoke(
+    client, admin, existing_permission, existing_service, session_factory
+):
+    resp = await client.delete(
+        f"/api/v1/services/{existing_service.slug}/permissions/{existing_permission.application_id}",
+        headers=auth_header(admin),
+    )
+    assert resp.status_code in (200, 204)
+    async with session_factory() as s:
+        r = (
+            await s.execute(
+                select(AuditEvent).where(AuditEvent.action == "service_permission.revoke")
+            )
+        ).scalar_one()
+    assert r.target_id == str(existing_permission.id)
+    assert r.before is not None
+    assert r.after is None
