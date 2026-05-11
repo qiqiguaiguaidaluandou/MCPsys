@@ -67,6 +67,12 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, roles: ['admin'], layout: 'app', title: 'nav.users' },
   },
   {
+    path: '/audit-events',
+    name: 'AuditEventList',
+    component: () => import('@/views/audit/AuditEventListPage.vue'),
+    meta: { requiresAuth: true, roles: ['admin'], layout: 'app', title: 'nav.audit' },
+  },
+  {
     path: '/profile',
     name: 'Profile',
     component: () => import('@/views/profile/ProfilePage.vue'),

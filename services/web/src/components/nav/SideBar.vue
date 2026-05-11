@@ -43,6 +43,7 @@ const menu = computed<MenuItem[]>(() => [
     key: 'system-group', icon: 'settings', labelKey: 'nav.system', roles: ['admin'],
     children: [
       { key: 'users', routeName: 'UserList', icon: 'users', labelKey: 'nav.users' },
+      { key: 'audit', routeName: 'AuditEventList', icon: 'clipboard-list', labelKey: 'nav.audit' },
     ],
   },
   {
@@ -50,7 +51,6 @@ const menu = computed<MenuItem[]>(() => [
     children: [
       { key: 'permissions', icon: 'shield', labelKey: 'nav.permissions', disabled: true },
       { key: 'config',      icon: 'sliders', labelKey: 'nav.config',      disabled: true },
-      { key: 'audit',       icon: 'clipboard-list', labelKey: 'nav.audit', disabled: true },
       { key: 'versions',    icon: 'git-branch', labelKey: 'nav.versions',  disabled: true },
     ],
   },

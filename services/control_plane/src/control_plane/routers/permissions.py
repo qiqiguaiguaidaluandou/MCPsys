@@ -1,14 +1,15 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
-from mcpsys_shared.models import Application, McpService, ServicePermission
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from mcpsys_shared.models import Application, McpService, ServicePermission, User
 from pydantic import BaseModel, ConfigDict
 from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..deps import get_current_user, get_db, get_redis, require_role
+from ..audit import Action, audit_log, model_to_dict
+from ..deps import get_db, get_redis, require_role
 from ..invalidator import publish_policy_invalidate
 
 router = APIRouter(tags=["permissions"])
@@ -45,14 +46,14 @@ async def _get_service_by_slug(slug: str, db: AsyncSession) -> McpService:
 @router.post(
     "/api/v1/services/{slug}/permissions",
     response_model=PermissionOut,
-    dependencies=[Depends(require_role("admin", "operator"))],
 )
 async def grant_permission(
     slug: str,
     payload: PermissionCreate,
     response: Response,
+    request: Request,
+    current_user: User = Depends(require_role("admin", "operator")),
     db: AsyncSession = Depends(get_db),
-    actor=Depends(get_current_user),
     redis: Redis | None = Depends(get_redis),
 ) -> PermissionOut:
     svc = await _get_service_by_slug(slug, db)
@@ -76,7 +77,7 @@ async def grant_permission(
     perm = ServicePermission(
         application_id=payload.application_id,
         service_id=svc.id,
-        granted_by=actor.id,
+        granted_by=current_user.id,
         note=payload.note,
     )
     db.add(perm)
@@ -96,7 +97,17 @@ async def grant_permission(
         return PermissionOut.model_validate(existing)
 
     await db.refresh(perm)
-    # commit before publish so the listener-side reload sees the new row
+    await audit_log(
+        db,
+        action=Action.SERVICE_PERMISSION_GRANT,
+        target_type="service_permission",
+        target_id=str(perm.id),
+        before=None,
+        after=model_to_dict(perm),
+        actor=current_user,
+        request=request,
+    )
+    # commit main write + audit row atomically; publish MUST follow commit (V1-A.1 invariant)
     await db.commit()
     await publish_policy_invalidate(redis, svc.id)
     response.status_code = status.HTTP_201_CREATED
@@ -125,11 +136,12 @@ async def list_service_permissions(
 @router.delete(
     "/api/v1/services/{slug}/permissions/{application_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_role("admin", "operator"))],
 )
 async def revoke_permission(
     slug: str,
     application_id: int,
+    request: Request,
+    current_user: User = Depends(require_role("admin", "operator")),
     db: AsyncSession = Depends(get_db),
     redis: Redis | None = Depends(get_redis),
 ) -> Response:
@@ -142,8 +154,21 @@ async def revoke_permission(
     )
     row = res.scalar_one_or_none()
     if row is not None:
+        before = model_to_dict(row)
+        perm_id = row.id  # capture before delete (object becomes detached after delete)
         await db.delete(row)
         await db.flush()
+        await audit_log(
+            db,
+            action=Action.SERVICE_PERMISSION_REVOKE,
+            target_type="service_permission",
+            target_id=str(perm_id),
+            before=before,
+            after=None,
+            actor=current_user,
+            request=request,
+        )
+        # commit main write + audit row atomically; publish MUST follow commit (V1-A.1 invariant)
         await db.commit()
         await publish_policy_invalidate(redis, svc.id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

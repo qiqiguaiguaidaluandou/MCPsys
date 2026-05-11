@@ -86,4 +86,15 @@ echo "[smoke] query call logs"
 curl -fsS "$BASE/api/v1/call-logs?limit=5" \
     -H "Authorization: Bearer $TOKEN" | python -m json.tool | head -20
 
+echo "[smoke] verifying audit-events ..."
+AUDIT=$(curl -fsS "$BASE/api/v1/audit-events?page_size=10" -H "Authorization: Bearer $TOKEN")
+ACTIONS=$(echo "$AUDIT" | python3 -c "import sys,json; print(' '.join(it['action'] for it in json.load(sys.stdin)['items']))")
+echo "[smoke]   recent actions: $ACTIONS"
+if ! echo "$ACTIONS" | grep -q "service.create"; then
+  echo "[smoke] FAIL: 期望审计记录中有 service.create"; exit 1
+fi
+if ! echo "$ACTIONS" | grep -q "application.create"; then
+  echo "[smoke] FAIL: 期望审计记录中有 application.create"; exit 1
+fi
+
 echo "[smoke] OK"

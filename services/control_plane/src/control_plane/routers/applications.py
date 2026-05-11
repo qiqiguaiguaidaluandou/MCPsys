@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -6,7 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from mcpsys_shared.models import Application, User
 
-from ..deps import get_current_user, get_db, require_role
+from ..audit import Action, audit_log, model_to_dict
+from ..deps import get_db, require_role
 
 router = APIRouter(prefix="/api/v1/applications", tags=["applications"])
 
@@ -35,12 +36,12 @@ class ApplicationList(BaseModel):
     "",
     response_model=ApplicationOut,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_role("admin", "operator"))],
 )
 async def create_application(
     payload: ApplicationCreate,
+    request: Request,
+    current_user: User = Depends(require_role("admin", "operator")),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ) -> ApplicationOut:
     app_obj = Application(
         name=payload.name,
@@ -53,6 +54,16 @@ async def create_application(
         await db.flush()
     except IntegrityError as e:
         raise HTTPException(status.HTTP_409_CONFLICT, "name already exists") from e
+    await audit_log(
+        db,
+        action=Action.APPLICATION_CREATE,
+        target_type="application",
+        target_id=str(app_obj.id),
+        before=None,
+        after=model_to_dict(app_obj),
+        actor=current_user,
+        request=request,
+    )
     return ApplicationOut.model_validate(app_obj)
 
 

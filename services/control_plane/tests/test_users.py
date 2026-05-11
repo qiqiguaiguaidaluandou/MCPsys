@@ -1,6 +1,7 @@
 import pytest
+from sqlalchemy import select
 
-from mcpsys_shared.models import Application, User, UserRole, UserStatus
+from mcpsys_shared.models import Application, AuditEvent, User, UserRole, UserStatus
 
 from control_plane.security import encode_jwt, hash_password
 from control_plane.settings import settings
@@ -177,3 +178,50 @@ async def test_change_password_nonexistent_user(client, admin):
         json={"password": "anything12"},
     )
     assert resp.status_code == 404
+
+
+async def test_audit_user_create(client, admin, session_factory):
+    resp = await client.post(
+        "/api/v1/users",
+        headers=auth_header(admin),
+        json={"username": "carol", "password": "secret123", "role": "viewer"},
+    )
+    assert resp.status_code == 201
+    new_user_id = resp.json()["id"]
+
+    async with session_factory() as s:
+        rows = (await s.execute(select(AuditEvent).where(AuditEvent.action == "user.create"))).scalars().all()
+    assert len(rows) == 1
+    r = rows[0]
+    assert r.target_type == "user"
+    assert r.target_id == str(new_user_id)
+    assert r.before is None
+    assert r.after["username"] == "carol"
+    assert "password_hash" not in r.after
+    assert r.actor_user_id == admin.id
+
+
+async def test_audit_user_delete(client, admin, viewer, session_factory):
+    resp = await client.delete(f"/api/v1/users/{viewer.id}", headers=auth_header(admin))
+    assert resp.status_code == 204
+    async with session_factory() as s:
+        r = (await s.execute(select(AuditEvent).where(AuditEvent.action == "user.delete"))).scalar_one()
+    assert r.target_id == str(viewer.id)
+    assert r.before["username"] == "viewer"
+    assert r.after is None
+    assert r.actor_user_id == admin.id
+
+
+async def test_audit_user_password_change(client, viewer, session_factory):
+    resp = await client.put(
+        f"/api/v1/users/{viewer.id}",
+        headers=auth_header(viewer),
+        json={"password": "newpass1234"},
+    )
+    assert resp.status_code == 200
+    async with session_factory() as s:
+        r = (await s.execute(select(AuditEvent).where(AuditEvent.action == "user.password_change"))).scalar_one()
+    assert r.target_id == str(viewer.id)
+    assert r.actor_user_id == viewer.id
+    assert "password_hash" not in (r.before or {})
+    assert "password_hash" not in (r.after or {})

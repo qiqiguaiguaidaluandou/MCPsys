@@ -1,9 +1,18 @@
+from datetime import UTC, datetime
+
 import pytest
-
-from mcpsys_shared.models import Application, User, UserRole, UserStatus
-
-from control_plane.security import encode_jwt, hash_password
+from control_plane.security import encode_jwt, generate_api_key, hash_password
 from control_plane.settings import settings
+from mcpsys_shared.models import (
+    ApiKey,
+    ApiKeyOwnerType,
+    Application,
+    AuditEvent,
+    User,
+    UserRole,
+    UserStatus,
+)
+from sqlalchemy import select
 
 
 @pytest.fixture
@@ -186,3 +195,130 @@ async def test_patch_api_key_qps(client, admin):
     )
     assert clear_resp.status_code == 200
     assert clear_resp.json()["rate_limit_qps"] is None
+
+
+@pytest.fixture
+async def application(admin, session_factory):
+    async with session_factory() as s:
+        a = Application(name="audit-key-app", owner_user_id=admin.id)
+        s.add(a)
+        await s.commit()
+        await s.refresh(a)
+        return a
+
+
+@pytest.fixture
+async def existing_api_key(application, session_factory):
+    async with session_factory() as s:
+        _plain, prefix, hashed = generate_api_key()
+        k = ApiKey(
+            name="existing-key",
+            key_prefix=prefix,
+            key_hash=hashed,
+            owner_type=ApiKeyOwnerType.application,
+            owner_id=application.id,
+        )
+        s.add(k)
+        await s.commit()
+        await s.refresh(k)
+        return k
+
+
+@pytest.fixture
+async def revoked_api_key(application, session_factory):
+    async with session_factory() as s:
+        _plain, prefix, hashed = generate_api_key()
+        k = ApiKey(
+            name="revoked-key",
+            key_prefix=prefix,
+            key_hash=hashed,
+            owner_type=ApiKeyOwnerType.application,
+            owner_id=application.id,
+            revoked_at=datetime.now(UTC),
+        )
+        s.add(k)
+        await s.commit()
+        await s.refresh(k)
+        return k
+
+
+async def test_audit_api_key_issue(client, admin, application, session_factory):
+    resp = await client.post(
+        "/api/v1/api-keys",
+        headers=auth_header(admin),
+        json={
+            "name": "audit-issue-key",
+            "owner_type": "application",
+            "owner_id": application.id,
+        },
+    )
+    assert resp.status_code == 201
+    key_id = resp.json()["id"]
+
+    async with session_factory() as s:
+        r = (
+            await s.execute(select(AuditEvent).where(AuditEvent.action == "api_key.issue"))
+        ).scalar_one()
+    assert r.target_type == "api_key"
+    assert r.target_id == str(key_id)
+    assert r.before is None
+    assert r.after["name"] == "audit-issue-key"
+    assert "key_hash" not in r.after
+    assert r.actor_user_id == admin.id
+
+
+async def test_audit_api_key_revoke(client, admin, existing_api_key, session_factory):
+    resp = await client.delete(
+        f"/api/v1/api-keys/{existing_api_key.id}",
+        headers=auth_header(admin),
+    )
+    assert resp.status_code == 204
+
+    async with session_factory() as s:
+        r = (
+            await s.execute(select(AuditEvent).where(AuditEvent.action == "api_key.revoke"))
+        ).scalar_one()
+    assert r.target_type == "api_key"
+    assert r.target_id == str(existing_api_key.id)
+    assert r.before["revoked_at"] is None
+    assert r.after["revoked_at"] is not None
+    assert "key_hash" not in r.before
+    assert "key_hash" not in r.after
+    assert r.actor_user_id == admin.id
+
+
+async def test_audit_api_key_update(client, admin, existing_api_key, session_factory):
+    resp = await client.patch(
+        f"/api/v1/api-keys/{existing_api_key.id}",
+        headers=auth_header(admin),
+        json={"rate_limit_qps": 50},
+    )
+    assert resp.status_code == 200
+
+    async with session_factory() as s:
+        r = (
+            await s.execute(select(AuditEvent).where(AuditEvent.action == "api_key.update"))
+        ).scalar_one()
+    assert r.target_type == "api_key"
+    assert r.target_id == str(existing_api_key.id)
+    assert r.after["rate_limit_qps"] == 50
+    assert "key_hash" not in r.after
+    assert r.actor_user_id == admin.id
+
+
+async def test_audit_api_key_delete_permanent(client, admin, revoked_api_key, session_factory):
+    resp = await client.delete(
+        f"/api/v1/api-keys/{revoked_api_key.id}/permanent",
+        headers=auth_header(admin),
+    )
+    assert resp.status_code == 204
+
+    async with session_factory() as s:
+        r = (
+            await s.execute(select(AuditEvent).where(AuditEvent.action == "api_key.delete"))
+        ).scalar_one()
+    assert r.target_type == "api_key"
+    assert r.target_id == str(revoked_api_key.id)
+    assert r.after is None
+    assert "key_hash" not in r.before
+    assert r.actor_user_id == admin.id

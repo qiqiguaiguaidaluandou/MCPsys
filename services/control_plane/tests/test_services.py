@@ -3,8 +3,9 @@ import asyncio
 import pytest
 from control_plane.security import encode_jwt, hash_password
 from control_plane.settings import settings
-from mcpsys_shared.models import User, UserRole, UserStatus
+from mcpsys_shared.models import AuditEvent, McpService, User, UserRole, UserStatus
 from redis.asyncio import Redis
+from sqlalchemy import select
 
 
 @pytest.fixture
@@ -205,3 +206,64 @@ async def test_delete_publishes_service_invalidate(client, admin, redis_url):
             assert await _drain(ps, "byebye")
     finally:
         await sub.aclose()
+
+
+@pytest.fixture
+async def existing_service(session_factory):
+    async with session_factory() as s:
+        svc = McpService(
+            slug="audit-existing",
+            display_name="Audit Existing",
+            endpoint_url="http://audit-existing.internal:8000/mcp",
+        )
+        s.add(svc)
+        await s.commit()
+        await s.refresh(svc)
+        return svc
+
+
+async def test_audit_service_create(client, admin, session_factory):
+    resp = await client.post(
+        "/api/v1/services",
+        headers=auth_header(admin),
+        json={
+            "slug": "audit-svc",
+            "display_name": "Audit Svc",
+            "endpoint_url": "http://audit-svc.internal:8000/mcp",
+        },
+    )
+    assert resp.status_code == 201
+    async with session_factory() as s:
+        r = (await s.execute(select(AuditEvent).where(AuditEvent.action == "service.create"))).scalar_one()
+    assert r.target_type == "mcp_service"
+    assert r.before is None
+    assert r.after["slug"] == "audit-svc"
+    assert r.actor_user_id == admin.id
+
+
+async def test_audit_service_update(client, admin, existing_service, session_factory):
+    resp = await client.patch(
+        f"/api/v1/services/{existing_service.slug}",
+        headers=auth_header(admin),
+        json={"display_name": "Renamed"},
+    )
+    assert resp.status_code == 200
+    async with session_factory() as s:
+        r = (await s.execute(select(AuditEvent).where(AuditEvent.action == "service.update"))).scalar_one()
+    assert r.before["display_name"] != "Renamed"
+    assert r.after["display_name"] == "Renamed"
+
+
+async def test_audit_service_delete(client, admin, existing_service, session_factory):
+    resp = await client.delete(
+        f"/api/v1/services/{existing_service.slug}",
+        headers=auth_header(admin),
+    )
+    assert resp.status_code in (200, 204)
+    async with session_factory() as s:
+        r = (await s.execute(select(AuditEvent).where(AuditEvent.action == "service.delete"))).scalar_one()
+    assert r.target_id == str(existing_service.id)
+    assert r.before is not None
+    # Soft-delete: row stays, status flipped to disabled.
+    assert r.after is not None
+    assert r.after["status"] == "disabled"
