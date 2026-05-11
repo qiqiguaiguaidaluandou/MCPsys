@@ -1,11 +1,12 @@
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from mcpsys_shared.models import (
     HealthStatus,
     McpService,
     ServiceStatus,
     TransportType,
+    User,
 )
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 from redis.asyncio import Redis
@@ -13,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..audit import Action, audit_log, model_to_dict
 from ..deps import get_db, get_redis, require_role
 from ..invalidator import publish_service_invalidate
 
@@ -75,9 +77,13 @@ class ServiceList(BaseModel):
     "",
     response_model=ServiceOut,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_role("admin", "operator"))],
 )
-async def create_service(payload: ServiceCreate, db: AsyncSession = Depends(get_db)) -> ServiceOut:
+async def create_service(
+    payload: ServiceCreate,
+    request: Request,
+    current_user: User = Depends(require_role("admin", "operator")),
+    db: AsyncSession = Depends(get_db),
+) -> ServiceOut:
     svc = McpService(
         slug=payload.slug,
         display_name=payload.display_name,
@@ -93,6 +99,16 @@ async def create_service(payload: ServiceCreate, db: AsyncSession = Depends(get_
         await db.flush()
     except IntegrityError as e:
         raise HTTPException(status.HTTP_409_CONFLICT, "slug already exists") from e
+    await audit_log(
+        db,
+        action=Action.SERVICE_CREATE,
+        target_type="mcp_service",
+        target_id=str(svc.id),
+        before=None,
+        after=model_to_dict(svc),
+        actor=current_user,
+        request=request,
+    )
     return ServiceOut.model_validate(svc)
 
 
@@ -123,11 +139,12 @@ async def get_service(slug: str, db: AsyncSession = Depends(get_db)) -> ServiceO
 @router.patch(
     "/{slug}",
     response_model=ServiceOut,
-    dependencies=[Depends(require_role("admin", "operator"))],
 )
 async def update_service(
     slug: str,
     payload: ServiceUpdate,
+    request: Request,
+    current_user: User = Depends(require_role("admin", "operator")),
     db: AsyncSession = Depends(get_db),
     redis: Redis | None = Depends(get_redis),
 ) -> ServiceOut:
@@ -136,12 +153,26 @@ async def update_service(
     if svc is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "service not found")
 
+    before = model_to_dict(svc)
     data = payload.model_dump(exclude_unset=True)
     if "endpoint_url" in data and data["endpoint_url"] is not None:
         data["endpoint_url"] = str(data["endpoint_url"])
     for k, v in data.items():
         setattr(svc, k, v)
     await db.flush()
+    await db.refresh(svc)  # onupdate=func.now() expires updated_at; refresh repopulates
+    after = model_to_dict(svc)
+    await audit_log(
+        db,
+        action=Action.SERVICE_UPDATE,
+        target_type="mcp_service",
+        target_id=str(svc.id),
+        before=before,
+        after=after,
+        actor=current_user,
+        request=request,
+    )
+    # commit main write + audit row atomically; publish MUST follow commit (V1-A.1 invariant)
     await db.commit()
     await publish_service_invalidate(redis, svc.slug)
     return ServiceOut.model_validate(svc)
@@ -150,10 +181,11 @@ async def update_service(
 @router.delete(
     "/{slug}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_role("admin"))],
 )
 async def delete_service(
     slug: str,
+    request: Request,
+    current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
     redis: Redis | None = Depends(get_redis),
 ) -> Response:
@@ -163,8 +195,22 @@ async def delete_service(
     svc = res.scalar_one_or_none()
     if svc is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "service not found")
+    before = model_to_dict(svc)
     svc.status = ServiceStatus.disabled
     await db.flush()
+    await db.refresh(svc)  # onupdate=func.now() expires updated_at; refresh repopulates
+    after = model_to_dict(svc)
+    await audit_log(
+        db,
+        action=Action.SERVICE_DELETE,
+        target_type="mcp_service",
+        target_id=str(svc.id),
+        before=before,
+        after=after,
+        actor=current_user,
+        request=request,
+    )
+    # commit main write + audit row atomically; publish MUST follow commit (V1-A.1 invariant)
     await db.commit()
     await publish_service_invalidate(redis, svc.slug)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
