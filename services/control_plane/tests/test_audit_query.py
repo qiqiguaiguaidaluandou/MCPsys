@@ -37,6 +37,16 @@ async def viewer(session_factory):
 
 
 @pytest.fixture
+async def operator(session_factory):
+    async with session_factory() as s:
+        u = User(username="operator", password_hash=hash_password("p"), role=UserRole.operator, status=UserStatus.active)
+        s.add(u)
+        await s.commit()
+        await s.refresh(u)
+        return u
+
+
+@pytest.fixture
 async def seed_events(session_factory, admin):
     """填 5 条混合 audit_events 用于查询测试。"""
     now = datetime.now(UTC)
@@ -63,6 +73,11 @@ async def test_unauthenticated(client):
 
 async def test_viewer_forbidden(client, viewer):
     resp = await client.get("/api/v1/audit-events", headers=auth_header(viewer))
+    assert resp.status_code == 403
+
+
+async def test_operator_forbidden(client, operator):
+    resp = await client.get("/api/v1/audit-events", headers=auth_header(operator))
     assert resp.status_code == 403
 
 
