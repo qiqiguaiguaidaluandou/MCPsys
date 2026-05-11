@@ -1,12 +1,12 @@
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from mcpsys_shared.models import ApiKey, ApiKeyOwnerType, Application, User
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from mcpsys_shared.models import ApiKey, ApiKeyOwnerType, Application, User
-
+from ..audit import Action, audit_log, model_to_dict
 from ..deps import get_db, require_role
 from ..security import generate_api_key
 
@@ -64,9 +64,13 @@ async def _validate_owner(db: AsyncSession, owner_type: ApiKeyOwnerType, owner_i
     "",
     response_model=ApiKeyCreated,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_role("admin", "operator"))],
 )
-async def create_api_key(payload: ApiKeyCreate, db: AsyncSession = Depends(get_db)) -> ApiKeyCreated:
+async def create_api_key(
+    payload: ApiKeyCreate,
+    request: Request,
+    current_user: User = Depends(require_role("admin", "operator")),
+    db: AsyncSession = Depends(get_db),
+) -> ApiKeyCreated:
     await _validate_owner(db, payload.owner_type, payload.owner_id)
     plaintext, prefix, hashed = generate_api_key()
     key = ApiKey(
@@ -80,6 +84,16 @@ async def create_api_key(payload: ApiKeyCreate, db: AsyncSession = Depends(get_d
     )
     db.add(key)
     await db.flush()
+    await audit_log(
+        db,
+        action=Action.API_KEY_ISSUE,
+        target_type="api_key",
+        target_id=str(key.id),
+        before=None,
+        after=model_to_dict(key),
+        actor=current_user,
+        request=request,
+    )
     return ApiKeyCreated(id=key.id, name=key.name, plaintext=plaintext, key_prefix=prefix)
 
 
@@ -97,44 +111,76 @@ async def list_api_keys(db: AsyncSession = Depends(get_db)) -> ApiKeyList:
 @router.delete(
     "/{key_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_role("admin", "operator"))],
 )
-async def revoke_api_key(key_id: int, db: AsyncSession = Depends(get_db)) -> Response:
+async def revoke_api_key(
+    key_id: int,
+    request: Request,
+    current_user: User = Depends(require_role("admin", "operator")),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
     res = await db.execute(select(ApiKey).where(ApiKey.id == key_id))
     key = res.scalar_one_or_none()
     if key is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "api key not found")
     if key.revoked_at is None:
+        before = model_to_dict(key)
         key.revoked_at = datetime.now(UTC)
         await db.flush()
+        after = model_to_dict(key)
+        await audit_log(
+            db,
+            action=Action.API_KEY_REVOKE,
+            target_type="api_key",
+            target_id=str(key.id),
+            before=before,
+            after=after,
+            actor=current_user,
+            request=request,
+        )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.delete(
     "/{key_id}/permanent",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_role("admin", "operator"))],
 )
-async def delete_api_key_permanent(key_id: int, db: AsyncSession = Depends(get_db)) -> Response:
+async def delete_api_key_permanent(
+    key_id: int,
+    request: Request,
+    current_user: User = Depends(require_role("admin", "operator")),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
     res = await db.execute(select(ApiKey).where(ApiKey.id == key_id))
     key = res.scalar_one_or_none()
     if key is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "api key not found")
     if key.revoked_at is None:
         raise HTTPException(status.HTTP_409_CONFLICT, "key must be revoked before permanent delete")
+    before = model_to_dict(key)
     await db.delete(key)
     await db.flush()
+    await audit_log(
+        db,
+        action=Action.API_KEY_DELETE,
+        target_type="api_key",
+        target_id=str(key_id),
+        before=before,
+        after=None,
+        actor=current_user,
+        request=request,
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.patch(
     "/{key_id}",
     response_model=ApiKeyOut,
-    dependencies=[Depends(require_role("admin", "operator"))],
 )
 async def update_api_key(
     key_id: int,
     payload: ApiKeyUpdate,
+    request: Request,
+    current_user: User = Depends(require_role("admin", "operator")),
     db: AsyncSession = Depends(get_db),
 ) -> ApiKeyOut:
     res = await db.execute(select(ApiKey).where(ApiKey.id == key_id))
@@ -142,9 +188,20 @@ async def update_api_key(
     if key is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "api key not found")
 
+    before = model_to_dict(key)
     data = payload.model_dump(exclude_unset=True)
     for k, v in data.items():
         setattr(key, k, v)
     await db.flush()
-    await db.refresh(key)
+    after = model_to_dict(key)
+    await audit_log(
+        db,
+        action=Action.API_KEY_UPDATE,
+        target_type="api_key",
+        target_id=str(key.id),
+        before=before,
+        after=after,
+        actor=current_user,
+        request=request,
+    )
     return ApiKeyOut.model_validate(key)
