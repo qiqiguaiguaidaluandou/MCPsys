@@ -11,6 +11,9 @@ from .routers import (
     applications as applications_router,
 )
 from .routers import (
+    audit_events as audit_events_router,
+)
+from .routers import (
     auth as auth_router,
 )
 from .routers import (
@@ -55,6 +58,7 @@ app.include_router(services_router.router)
 app.include_router(api_keys_router.router)
 app.include_router(call_logs_router.router)
 app.include_router(permissions_router.router)
+app.include_router(audit_events_router.router)
 
 
 @app.get("/healthz")
