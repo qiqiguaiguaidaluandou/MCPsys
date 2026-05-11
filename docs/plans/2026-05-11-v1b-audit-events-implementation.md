@@ -484,7 +484,7 @@ async def create_user(
     payload: UserCreate,
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,  # type: ignore[assignment]
+    request: Request,
 ) -> UserOut:
     user = User(...)  # 不变
     db.add(user)
@@ -511,7 +511,7 @@ async def update_user(
     payload: UserUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,  # type: ignore[assignment]
+    request: Request,
 ) -> UserOut:
     if user_id != current_user.id and current_user.role != UserRole.admin:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "无权修改其他用户")
@@ -538,7 +538,7 @@ async def delete_user(
     user_id: int,
     current_user: User = Depends(require_role("admin")),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,  # type: ignore[assignment]
+    request: Request,
 ) -> None:
     if user_id == current_user.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "不能删除当前登录账号")
@@ -619,7 +619,7 @@ uv run pytest services/control_plane/tests/test_applications.py::test_audit_appl
 在 `create_application` handler（line 40 起）：
 - import 加 `from fastapi import Request` 已有则不动
 - import 加 `from ..audit import Action, audit_log, model_to_dict`
-- 函数签名加 `current_user: User = Depends(require_role("admin", "operator"))` （沿用原 dependencies 角色）和 `request: Request = None  # type: ignore[assignment]`
+- 函数签名加 `current_user: User = Depends(require_role("admin", "operator"))` （沿用原 dependencies 角色）和 `request: Request`
 - 移除装饰器层 `dependencies=[Depends(require_role(...))]`
 - `db.flush()` 后加：
 
@@ -729,7 +729,7 @@ uv run pytest services/control_plane/tests/test_api_keys.py -v
 - `update_api_key`：拿到 key、抓 before、apply payload、flush、抓 after、audit_log
 - `delete_api_key_permanent`：拿到 key、抓 before、`db.delete(key)`、flush、audit_log(after=None)
 
-每个 handler 函数签名加 `current_user: User = Depends(require_role(...))`（沿用原 role 配置）和 `request: Request = None`，导入 `from ..audit import Action, audit_log, model_to_dict`。
+每个 handler 函数签名加 `current_user: User = Depends(require_role(...))`（沿用原 role 配置）和 `request: Request`，导入 `from ..audit import Action, audit_log, model_to_dict`。
 
 - [ ] **Step 4: Run pass**
 
@@ -811,7 +811,7 @@ uv run pytest services/control_plane/tests/test_services.py -v
 
 - [ ] **Step 3: Hook services.py 3 个 handler**
 
-同 §3.2 模板：每个 handler 加 `current_user: User = Depends(require_role("admin", "operator"))` (or whatever the existing role) 和 `request: Request = None`，import audit 模块，主写完 flush 后调 audit_log。
+同 §3.2 模板：每个 handler 加 `current_user: User = Depends(require_role("admin", "operator"))` (or whatever the existing role) 和 `request: Request`，import audit 模块，主写完 flush 后调 audit_log。
 
 - create_service：before=None / after=model_to_dict
 - update_service (`PATCH /{slug}`)：before snapshot → modify → flush → after snapshot → audit_log
