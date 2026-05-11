@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from mcpsys_shared.models import User, UserRole, UserStatus
 
-from ..deps import get_db, require_role
+from ..deps import get_current_user, get_db, require_role
 from ..security import hash_password
 
 router = APIRouter(prefix="/api/v1/users", tags=["users"])
@@ -63,3 +63,28 @@ async def list_users(db: AsyncSession = Depends(get_db)) -> UserList:
     res = await db.execute(select(User).order_by(User.id))
     users = res.scalars().all()
     return UserList(items=[UserOut.model_validate(u) for u in users], total=len(users))
+
+
+@router.delete(
+    "/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_role("admin"))],
+)
+async def delete_user(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    if user_id == current_user.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "不能删除当前登录账号")
+    user = await db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "用户不存在")
+    await db.delete(user)
+    try:
+        await db.flush()
+    except IntegrityError as e:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "无法删除：用户被应用 / 审计 / 服务版本 / 权限授予记录引用，请先转移或考虑禁用账号",
+        ) from e

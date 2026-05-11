@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, reactive } from 'vue';
-import { useRouter } from 'vue-router';
-import { listUsers, createUser, type CreateUserPayload } from '@/api/users';
+import { listUsers, createUser, deleteUser, type CreateUserPayload } from '@/api/users';
 import type { User, Role, UserStatus } from '@/api/types';
 import { useAuthStore } from '@/stores/auth';
 import PageHeader from '@/components/common/PageHeader.vue';
@@ -10,9 +9,8 @@ import StatusTag from '@/components/common/StatusTag.vue';
 import RelativeTime from '@/components/common/RelativeTime.vue';
 import Icon from '@/components/icons/Icon.vue';
 import { ROLE_LABELS } from '@/utils/constants';
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus';
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus';
 
-const router = useRouter();
 const auth = useAuthStore();
 const items = ref<User[]>([]);
 const loading = ref(false);
@@ -69,6 +67,25 @@ async function onCreate() {
   }
 }
 
+async function onDelete(row: User) {
+  try {
+    await ElMessageBox.confirm(
+      `确认删除用户 ${row.username}？此操作不可撤销。`,
+      '删除用户',
+      {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+      },
+    );
+  } catch {
+    return;
+  }
+  await deleteUser(row.id);
+  ElMessage.success('已删除');
+  await load();
+}
+
 onMounted(load);
 </script>
 
@@ -84,7 +101,7 @@ onMounted(load);
   <DataTable :data="items" :loading="loading">
     <el-table-column prop="username" label="用户名" min-width="200">
       <template #default="{ row }: { row: User }">
-        <router-link :to="`/users/${row.id}`" class="mono">{{ row.username }}</router-link>
+        <span class="mono">{{ row.username }}</span>
         <el-tag v-if="row.id === auth.user?.id" size="small" effect="plain" style="margin-left: 8px;">我自己</el-tag>
       </template>
     </el-table-column>
@@ -102,7 +119,12 @@ onMounted(load);
     </el-table-column>
     <el-table-column label="操作" width="100" fixed="right">
       <template #default="{ row }: { row: User }">
-        <el-button link type="primary" @click="router.push(`/users/${row.id}`)">编辑</el-button>
+        <el-button
+          link
+          type="danger"
+          :disabled="row.id === auth.user?.id"
+          @click="onDelete(row)"
+        >删除</el-button>
       </template>
     </el-table-column>
   </DataTable>

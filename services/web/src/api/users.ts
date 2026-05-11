@@ -5,10 +5,6 @@ export function listUsers(): Promise<PaginatedList<User>> {
   return client.get('/api/v1/users').then((r) => r.data);
 }
 
-export function getUser(id: number): Promise<User> {
-  return client.get(`/api/v1/users/${id}`).then((r) => r.data);
-}
-
 export interface CreateUserPayload {
   username: string;
   password: string;
@@ -28,4 +24,8 @@ export interface UpdateUserPayload {
 
 export function updateUser(id: number, payload: UpdateUserPayload): Promise<User> {
   return client.put(`/api/v1/users/${id}`, payload).then((r) => r.data);
+}
+
+export function deleteUser(id: number): Promise<void> {
+  return client.delete(`/api/v1/users/${id}`).then(() => undefined);
 }
