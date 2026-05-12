@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, reactive } from 'vue';
+import { useRouter } from 'vue-router';
 import { queryCallLogs, type CallLog, type CallLogQuery, type CallStatus } from '@/api/call-logs';
 import { listServices, type McpService } from '@/api/services';
 import PageHeader from '@/components/common/PageHeader.vue';
@@ -9,6 +10,7 @@ import Icon from '@/components/icons/Icon.vue';
 import { formatDateTime, formatDuration } from '@/utils/format';
 import dayjs from 'dayjs';
 
+const router = useRouter();
 const items = ref<CallLog[]>([]);
 const total = ref(0);
 const loading = ref(false);
@@ -137,6 +139,11 @@ function getServiceSlug(id: number): string {
       <template #default="{ row }: { row: CallLog }">
         <span v-if="row.error_message" class="text-secondary">{{ row.error_message }}</span>
         <span v-else>—</span>
+      </template>
+    </el-table-column>
+    <el-table-column label="操作" width="80" fixed="right">
+      <template #default="{ row }: { row: CallLog }">
+        <el-button link type="primary" @click="router.push(`/call-logs/${row.id}`)">详情</el-button>
       </template>
     </el-table-column>
   </DataTable>

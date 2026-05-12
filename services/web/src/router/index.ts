@@ -61,6 +61,12 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, roles: ['admin', 'operator'], layout: 'app', title: 'nav.callLogs' },
   },
   {
+    path: '/call-logs/:id',
+    name: 'CallLogDetail',
+    component: () => import('@/views/call-logs/CallLogDetailPage.vue'),
+    meta: { requiresAuth: true, roles: ['admin', 'operator'], layout: 'app' },
+  },
+  {
     path: '/users',
     name: 'UserList',
     component: () => import('@/views/users/UserListPage.vue'),

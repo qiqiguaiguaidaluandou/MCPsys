@@ -37,3 +37,12 @@ export interface CallLogQuery {
 export function queryCallLogs(params: CallLogQuery): Promise<PaginatedList<CallLog>> {
   return client.get('/api/v1/call-logs', { params }).then((r) => r.data);
 }
+
+export interface CallLogDetail extends CallLog {
+  request_body: string | null;
+  response_body: string | null;
+}
+
+export function getCallLog(id: string): Promise<CallLogDetail> {
+  return client.get(`/api/v1/call-logs/${id}`).then((r) => r.data);
+}
