@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 
@@ -15,6 +16,21 @@ from mcpsys_shared.models import (
 
 from control_plane.security import encode_jwt, hash_password
 from control_plane.settings import settings
+
+
+@pytest.fixture
+async def admin(session_factory):
+    async with session_factory() as s:
+        u = User(
+            username="logs-admin",
+            password_hash=hash_password("p"),
+            role=UserRole.admin,
+            status=UserStatus.active,
+        )
+        s.add(u)
+        await s.commit()
+        await s.refresh(u)
+        return u
 
 
 @pytest.fixture
@@ -120,3 +136,116 @@ async def test_viewer_forbidden_on_call_logs(client, viewer, seeded_logs):
         headers=auth_header(viewer),
     )
     assert resp.status_code == 403
+
+
+@pytest.fixture
+async def call_log_with_body(session_factory):
+    async with session_factory() as s:
+        svc = McpService(
+            slug="detail-svc",
+            display_name="Detail Svc",
+            endpoint_url="http://x/mcp",
+            transport=TransportType.streamable_http,
+            status=ServiceStatus.active,
+        )
+        s.add(svc)
+        await s.flush()
+        row = CallLog(
+            ts=datetime.now(UTC),
+            service_id=svc.id,
+            service_version="1.0",
+            tool_name="echo",
+            request_id="req-abc",
+            status=CallStatus.success,
+            http_status=200,
+            duration_ms=42,
+            request_body='{"x":1}',
+            response_body='{"ok":true}',
+            client_ip="10.0.0.5",
+        )
+        s.add(row)
+        await s.commit()
+        await s.refresh(row)
+        return row
+
+
+@pytest.fixture
+async def call_log_null_bodies(session_factory):
+    async with session_factory() as s:
+        svc = McpService(
+            slug="null-body-svc",
+            display_name="NB",
+            endpoint_url="http://x/mcp",
+            transport=TransportType.streamable_http,
+            status=ServiceStatus.active,
+        )
+        s.add(svc)
+        await s.flush()
+        row = CallLog(
+            ts=datetime.now(UTC),
+            service_id=svc.id,
+            status=CallStatus.success,
+            duration_ms=5,
+            request_body=None,
+            response_body=None,
+        )
+        s.add(row)
+        await s.commit()
+        await s.refresh(row)
+        return row
+
+
+async def test_get_call_log_as_admin(client, admin, call_log_with_body):
+    resp = await client.get(
+        f"/api/v1/call-logs/{call_log_with_body.id}",
+        headers=auth_header(admin),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["id"] == str(call_log_with_body.id)
+    assert body["request_body"] == '{"x":1}'
+    assert body["response_body"] == '{"ok":true}'
+    assert body["service_version"] == "1.0"
+    assert body["request_id"] == "req-abc"
+    assert body["client_ip"] == "10.0.0.5"
+    assert body["tool_name"] == "echo"
+
+
+async def test_get_call_log_as_operator(client, operator, call_log_with_body):
+    resp = await client.get(
+        f"/api/v1/call-logs/{call_log_with_body.id}",
+        headers=auth_header(operator),
+    )
+    assert resp.status_code == 200
+
+
+async def test_get_call_log_as_viewer_forbidden(client, viewer, call_log_with_body):
+    resp = await client.get(
+        f"/api/v1/call-logs/{call_log_with_body.id}",
+        headers=auth_header(viewer),
+    )
+    assert resp.status_code == 403
+
+
+async def test_get_call_log_unauthenticated(client, call_log_with_body):
+    resp = await client.get(f"/api/v1/call-logs/{call_log_with_body.id}")
+    assert resp.status_code == 401
+
+
+async def test_get_call_log_not_found(client, admin):
+    resp = await client.get(
+        f"/api/v1/call-logs/{uuid4()}",
+        headers=auth_header(admin),
+    )
+    assert resp.status_code == 404
+
+
+async def test_get_call_log_with_null_bodies(client, admin, call_log_null_bodies):
+    resp = await client.get(
+        f"/api/v1/call-logs/{call_log_null_bodies.id}",
+        headers=auth_header(admin),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["request_body"] is None
+    assert body["response_body"] is None

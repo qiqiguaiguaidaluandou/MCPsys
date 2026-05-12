@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +33,15 @@ class CallLogOut(BaseModel):
 class CallLogList(BaseModel):
     items: list[CallLogOut]
     total: int
+
+
+class CallLogDetail(CallLogOut):
+    service_version: str | None
+    request_id: str | None
+    error_message: str | None
+    request_body: str | None
+    response_body: str | None
+    client_ip: str | None
 
 
 # Restricted to admin/operator: viewer is global-read-only on metadata, but call_logs
@@ -77,3 +86,18 @@ async def list_call_logs(
     total = (await db.execute(total_q)).scalar_one()
     items = (await db.execute(items_q.limit(limit).offset(offset))).scalars().all()
     return CallLogList(items=[CallLogOut.model_validate(i) for i in items], total=total)
+
+
+@router.get(
+    "/{call_id}",
+    response_model=CallLogDetail,
+    dependencies=[Depends(require_role("admin", "operator"))],
+)
+async def get_call_log(
+    call_id: UUID,
+    db: AsyncSession = Depends(get_db),
+) -> CallLogDetail:
+    row = await db.get(CallLog, call_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "调用日志不存在")
+    return CallLogDetail.model_validate(row)
