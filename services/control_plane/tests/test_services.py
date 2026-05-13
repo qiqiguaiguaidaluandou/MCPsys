@@ -94,18 +94,48 @@ async def test_update_service_endpoint(client, admin):
     assert body["status"] == "disabled"
 
 
-async def test_delete_service_soft_marks_disabled(client, admin):
-    await client.post(
+async def test_delete_service_archives(client, admin):
+    create = await client.post(
         "/api/v1/services",
         headers=auth_header(admin),
         json={"slug": "tmp", "display_name": "Tmp", "endpoint_url": "http://tmp/mcp"},
     )
+    sid = create.json()["id"]
     resp = await client.delete("/api/v1/services/tmp", headers=auth_header(admin))
     assert resp.status_code == 204
-    # Soft-delete: row stays so call_logs history keeps its slug → name mapping.
-    resp2 = await client.get("/api/v1/services/tmp", headers=auth_header(admin))
-    assert resp2.status_code == 200
-    assert resp2.json()["status"] == "disabled"
+    # 原 slug 已释放；归档项可用新 slug 取回
+    resp_old = await client.get("/api/v1/services/tmp", headers=auth_header(admin))
+    assert resp_old.status_code == 404
+    resp_new = await client.get(f"/api/v1/services/__archived_{sid}", headers=auth_header(admin))
+    assert resp_new.status_code == 200
+    body = resp_new.json()
+    assert body["status"] == "disabled"
+    assert body["slug"] == f"__archived_{sid}"
+    assert body["display_name"] == "Tmp"  # display_name 不动
+
+
+async def test_delete_then_recreate_same_slug(client, admin):
+    """归档式删除的核心收益：原 slug 释放后可以重建同名服务。"""
+    create_first = await client.post(
+        "/api/v1/services",
+        headers=auth_header(admin),
+        json={"slug": "weather", "display_name": "Weather v1", "endpoint_url": "http://w1/mcp"},
+    )
+    assert create_first.status_code == 201
+    first_id = create_first.json()["id"]
+
+    del_resp = await client.delete("/api/v1/services/weather", headers=auth_header(admin))
+    assert del_resp.status_code == 204
+
+    create_second = await client.post(
+        "/api/v1/services",
+        headers=auth_header(admin),
+        json={"slug": "weather", "display_name": "Weather v2", "endpoint_url": "http://w2/mcp"},
+    )
+    assert create_second.status_code == 201
+    second_id = create_second.json()["id"]
+    assert second_id != first_id
+    assert create_second.json()["display_name"] == "Weather v2"
 
 
 async def test_create_service_with_qps(client, admin):
@@ -264,6 +294,7 @@ async def test_audit_service_delete(client, admin, existing_service, session_fac
         r = (await s.execute(select(AuditEvent).where(AuditEvent.action == "service.delete"))).scalar_one()
     assert r.target_id == str(existing_service.id)
     assert r.before is not None
-    # Soft-delete: row stays, status flipped to disabled.
+    assert r.before["slug"] == "audit-existing"  # 原始 slug 完整保留
     assert r.after is not None
     assert r.after["status"] == "disabled"
+    assert r.after["slug"] == f"__archived_{existing_service.id}"

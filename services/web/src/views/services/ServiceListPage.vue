@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, reactive } from 'vue';
 import { useRouter } from 'vue-router';
-import { listServices, createService, type McpService } from '@/api/services';
+import { listServices, createService, archiveService, type McpService } from '@/api/services';
 import { useAuthStore } from '@/stores/auth';
 import PageHeader from '@/components/common/PageHeader.vue';
 import StatusTag from '@/components/common/StatusTag.vue';
@@ -17,8 +17,39 @@ const auth = useAuthStore();
 const items = ref<McpService[]>([]);
 const loading = ref(false);
 const search = ref('');
-const filterStatus = ref<string>('');
+const filterStatus = ref<string>('active');  // 默认隐藏归档项
 const filterHealth = ref<string>('');
+
+const deleteDialog = reactive({
+  visible: false,
+  submitting: false,
+  target: null as McpService | null,
+  confirmInput: '',
+});
+
+function openDeleteDialog(svc: McpService) {
+  deleteDialog.target = svc;
+  deleteDialog.confirmInput = '';
+  deleteDialog.visible = true;
+}
+
+async function onDelete() {
+  const target = deleteDialog.target;
+  if (!target) return;
+  if (deleteDialog.confirmInput !== target.slug) {
+    ElMessage.warning('请完整输入 slug 以确认');
+    return;
+  }
+  deleteDialog.submitting = true;
+  try {
+    await archiveService(target.slug);
+    ElMessage.success(`服务 ${target.slug} 已归档`);
+    deleteDialog.visible = false;
+    await load();
+  } finally {
+    deleteDialog.submitting = false;
+  }
+}
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$/;
 
@@ -158,9 +189,15 @@ onMounted(load);
         <RelativeTime :value="row.last_health_check_at" />
       </template>
     </el-table-column>
-    <el-table-column label="操作" width="80" fixed="right">
+    <el-table-column label="操作" width="140" fixed="right">
       <template #default="{ row }: { row: McpService }">
         <el-button link type="primary" @click="router.push(`/services/${row.slug}`)">详情</el-button>
+        <el-button
+          v-if="auth.hasRole('admin') && row.status === 'active'"
+          link
+          type="danger"
+          @click="openDeleteDialog(row)"
+        >删除</el-button>
       </template>
     </el-table-column>
   </DataTable>
@@ -189,6 +226,31 @@ onMounted(load);
     <template #footer>
       <el-button @click="newDialog.visible = false">取消</el-button>
       <el-button type="primary" :loading="newDialog.submitting" @click="onCreate">创建</el-button>
+    </template>
+  </el-dialog>
+
+  <el-dialog v-model="deleteDialog.visible" title="删除服务" width="480">
+    <template v-if="deleteDialog.target">
+      <el-alert type="warning" :closable="false" show-icon>
+        <template #title>
+          归档式删除：服务将被禁用、slug 改写为 <code>__archived_{{ deleteDialog.target.id }}</code>，
+          原 slug <strong>{{ deleteDialog.target.slug }}</strong> 释放可被重新注册。
+          历史调用日志保留，可在审计事件中追溯。
+        </template>
+      </el-alert>
+      <p style="margin: var(--space-4) 0 var(--space-2);">
+        请输入 <code>{{ deleteDialog.target.slug }}</code> 以确认：
+      </p>
+      <el-input v-model="deleteDialog.confirmInput" :placeholder="deleteDialog.target.slug" />
+    </template>
+    <template #footer>
+      <el-button @click="deleteDialog.visible = false">取消</el-button>
+      <el-button
+        type="danger"
+        :loading="deleteDialog.submitting"
+        :disabled="!deleteDialog.target || deleteDialog.confirmInput !== deleteDialog.target.slug"
+        @click="onDelete"
+      >确认删除</el-button>
     </template>
   </el-dialog>
 </template>

@@ -189,14 +189,16 @@ async def delete_service(
     db: AsyncSession = Depends(get_db),
     redis: Redis | None = Depends(get_redis),
 ) -> Response:
-    """Soft-delete: mark status=disabled. Preserves call_logs history and the slug → name
-    mapping the dashboard joins on. Hard delete via SQL if you really need it."""
+    """Archive: status=disabled + slug 改写为 __archived_{id}。
+    保留 call_logs 历史（无 FK），同时释放原 slug 以便重建同名服务；
+    audit before 快照保留原始 slug/display_name。"""
     res = await db.execute(select(McpService).where(McpService.slug == slug))
     svc = res.scalar_one_or_none()
     if svc is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "service not found")
     before = model_to_dict(svc)
     svc.status = ServiceStatus.disabled
+    svc.slug = f"__archived_{svc.id}"
     await db.flush()
     await db.refresh(svc)  # onupdate=func.now() expires updated_at; refresh repopulates
     after = model_to_dict(svc)
@@ -212,5 +214,6 @@ async def delete_service(
     )
     # commit main write + audit row atomically; publish MUST follow commit (V1-A.1 invariant)
     await db.commit()
-    await publish_service_invalidate(redis, svc.slug)
+    # 失效用原始 slug（gateway / 缓存仍按它索引）
+    await publish_service_invalidate(redis, before["slug"])
     return Response(status_code=status.HTTP_204_NO_CONTENT)

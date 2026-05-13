@@ -56,6 +56,6 @@ export function updateService(slug: string, payload: UpdateServicePayload): Prom
   return client.patch(`/api/v1/services/${slug}`, payload).then((r) => r.data);
 }
 
-export function disableService(slug: string): Promise<void> {
+export function archiveService(slug: string): Promise<void> {
   return client.delete(`/api/v1/services/${slug}`).then(() => undefined);
 }
