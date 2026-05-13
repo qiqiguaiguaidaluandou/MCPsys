@@ -13,7 +13,6 @@ import PageHeader from '@/components/common/PageHeader.vue';
 import DataTable from '@/components/common/DataTable.vue';
 import StatusTag from '@/components/common/StatusTag.vue';
 import RelativeTime from '@/components/common/RelativeTime.vue';
-import CopyButton from '@/components/common/CopyButton.vue';
 import ApiKeyIssueModal from '@/components/feature/ApiKeyIssueModal.vue';
 import Icon from '@/components/icons/Icon.vue';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -99,10 +98,9 @@ onMounted(load);
   </PageHeader>
 
   <DataTable :data="items" :loading="loading">
-    <el-table-column label="Prefix" width="180">
+    <el-table-column label="Prefix" width="140">
       <template #default="{ row }: { row: ApiKey }">
         <span class="mono">{{ row.key_prefix }}...</span>
-        <CopyButton :text="row.key_prefix" />
       </template>
     </el-table-column>
     <el-table-column prop="name" label="名称" min-width="200" />
