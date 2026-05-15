@@ -5,6 +5,9 @@ BASE="${BASE:-http://localhost:8088}"
 USERNAME="${USERNAME:-admin}"
 PASSWORD="${PASSWORD:-admin123}"
 
+# 本次跑的窗口起点（UTC ISO，给审计断言 ?from_ts= 用）。在所有 API 调用前抓取。
+RUN_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
 echo "[smoke] healthz"
 curl -fsS "$BASE/healthz" | grep -q '"ok"'
 
@@ -115,24 +118,62 @@ curl -fsS "$BASE/api/v1/call-logs?limit=5" \
     -H "Authorization: Bearer $TOKEN" | python -m json.tool | head -20
 
 echo "[smoke] verifying audit-events ..."
-# 用 ?action= 精确过滤、不依赖最近 N 条窗口。service.create 与 application.create
-# 只在首次跑写入；重跑时它们早就被新事件挤出最近 page。改用过滤后任何时候只要
-# 库里存在该 action 即通过。
-check_audit() {
+# 只断言本次跑窗口内必然写入的动作。service.create / application.create 只在
+# 首次创建写一次，重跑走 409 幂等路径不写审计 —— 用 ?action=&from_ts=RUN_SINCE
+# 锁定到本次跑窗口，避免被历史数据干扰。
+check_audit_since() {
     local action="$1"
     local cnt
-    cnt=$(curl -fsS "$BASE/api/v1/audit-events?action=$action&page_size=1" \
+    cnt=$(curl -fsS "$BASE/api/v1/audit-events?action=$action&from_ts=$RUN_SINCE&page_size=1" \
               -H "Authorization: Bearer $TOKEN" \
               | python3 -c "import sys,json; print(json.load(sys.stdin)['total'])")
     if [ "$cnt" -lt 1 ]; then
-        echo "[smoke] FAIL: 期望审计记录中有 $action（数据库里一条都没有）"
+        echo "[smoke] FAIL: 期望本次跑窗口内有审计动作 $action（自 $RUN_SINCE 起 0 条）"
         exit 1
     fi
-    echo "[smoke]   audit action '$action' present (total=$cnt)"
+    echo "[smoke]   audit action '$action' present since run-start (total=$cnt)"
 }
 
-check_audit "service.create"
-check_audit "application.create"
-check_audit "application.update"
+check_audit_since "api_key.issue"       # POST /api-keys 每次都写
+check_audit_since "application.update"  # PATCH service_ids 每次写两次（清空 + 授权）
+check_audit_since "service.update"      # PATCH rate_limit_qps 每次写至少两次
+
+echo "[smoke] stats /overview range=24h"
+curl -fsS "$BASE/api/v1/stats/overview?range=24h" -H "Authorization: Bearer $TOKEN" \
+    | python3 -c "import sys,json; d=json.load(sys.stdin); \
+                  assert d['range']=='24h' and 'calls' in d and 'p95_ms' in d, d" \
+    && echo "[smoke]   overview OK"
+
+echo "[smoke] stats /timeseries metric=calls range=1h 应返回 60 个 1m 桶"
+curl -fsS "$BASE/api/v1/stats/timeseries?metric=calls&range=1h" -H "Authorization: Bearer $TOKEN" \
+    | python3 -c "import sys,json; d=json.load(sys.stdin); n=len(d['points']); \
+                  assert n==60, f'expected 60 points, got {n}'; \
+                  assert d['bucket']=='1m'" \
+    && echo "[smoke]   timeseries OK"
+
+echo "[smoke] stats /breakdown dim=service"
+curl -fsS "$BASE/api/v1/stats/breakdown?dim=service&range=24h" -H "Authorization: Bearer $TOKEN" \
+    | python3 -c "import sys,json; d=json.load(sys.stdin); \
+                  assert d['dim']=='service' and isinstance(d['rows'], list)" \
+    && echo "[smoke]   breakdown OK"
+
+echo "[smoke] stats /latency-histogram 应有 7 个桶且末桶 hi=null"
+curl -fsS "$BASE/api/v1/stats/latency-histogram?range=24h" -H "Authorization: Bearer $TOKEN" \
+    | python3 -c "import sys,json; d=json.load(sys.stdin); \
+                  assert len(d['buckets'])==7; assert d['buckets'][-1]['hi'] is None" \
+    && echo "[smoke]   latency-histogram OK"
+
+echo "[smoke] stats cache：第二次同样请求应命中 x-cache=hit"
+# 不在这里覆盖顶部的 EXIT trap（rate_limit_qps 复位）；用临时变量 + 手动 rm。
+HDR_FILE=$(mktemp)
+curl -fsS -o /dev/null -D "$HDR_FILE" \
+    "$BASE/api/v1/stats/overview?range=1h" -H "Authorization: Bearer $TOKEN"
+: > "$HDR_FILE"  # 清空再写第二次的 header
+curl -fsS -o /dev/null -D "$HDR_FILE" \
+    "$BASE/api/v1/stats/overview?range=1h" -H "Authorization: Bearer $TOKEN"
+CACHE=$(tr -d '\r' < "$HDR_FILE" | grep -i '^x-cache:' | awk '{print $2}')
+rm -f "$HDR_FILE"
+test "$CACHE" = "hit" || { echo "expected x-cache=hit on second call, got '$CACHE'"; exit 1; }
+echo "[smoke]   cache x-cache=hit OK"
 
 echo "[smoke] OK"
