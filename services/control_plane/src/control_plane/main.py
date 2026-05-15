@@ -26,6 +26,9 @@ from .routers import (
     services as services_router,
 )
 from .routers import (
+    stats as stats_router,
+)
+from .routers import (
     users as users_router,
 )
 from .settings import settings
@@ -59,6 +62,7 @@ app.include_router(api_keys_router.router)
 app.include_router(call_logs_router.router)
 app.include_router(permissions_router.router)
 app.include_router(audit_events_router.router)
+app.include_router(stats_router.router)
 
 
 @app.get("/healthz")
