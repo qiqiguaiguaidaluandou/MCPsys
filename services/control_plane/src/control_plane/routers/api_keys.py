@@ -15,8 +15,8 @@ router = APIRouter(prefix="/api/v1/api-keys", tags=["api-keys"])
 
 class ApiKeyCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
-    owner_type: ApiKeyOwnerType
-    owner_id: int
+    # Key 永远归属某个应用；调用权限由应用的可调用服务列表决定。
+    application_id: int
     expires_at: datetime | None = None
     rate_limit_qps: int | None = Field(default=None, ge=0)
 
@@ -51,13 +51,10 @@ class ApiKeyList(BaseModel):
     total: int
 
 
-async def _validate_owner(db: AsyncSession, owner_type: ApiKeyOwnerType, owner_id: int) -> None:
-    if owner_type == ApiKeyOwnerType.user:
-        res = await db.execute(select(User).where(User.id == owner_id))
-    else:
-        res = await db.execute(select(Application).where(Application.id == owner_id))
+async def _validate_application(db: AsyncSession, application_id: int) -> None:
+    res = await db.execute(select(Application).where(Application.id == application_id))
     if res.scalar_one_or_none() is None:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{owner_type.value} not found")
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "application not found")
 
 
 @router.post(
@@ -71,14 +68,14 @@ async def create_api_key(
     current_user: User = Depends(require_role("admin", "operator")),
     db: AsyncSession = Depends(get_db),
 ) -> ApiKeyCreated:
-    await _validate_owner(db, payload.owner_type, payload.owner_id)
+    await _validate_application(db, payload.application_id)
     plaintext, prefix, hashed = generate_api_key()
     key = ApiKey(
         name=payload.name,
         key_prefix=prefix,
         key_hash=hashed,
-        owner_type=payload.owner_type,
-        owner_id=payload.owner_id,
+        owner_type=ApiKeyOwnerType.application,
+        owner_id=payload.application_id,
         expires_at=payload.expires_at,
         rate_limit_qps=payload.rate_limit_qps,
     )

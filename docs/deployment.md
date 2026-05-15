@@ -232,16 +232,21 @@ TOKEN=$(curl -s -X POST http://localhost:8088/api/v1/auth/login \
     -d "username=admin&password=<adminpw>" \
     | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
-# 创建 application
+# 创建 application（可同时勾选该应用可调用的服务 id 列表；这里先建空，后面再 PATCH）
 APP=$(curl -s -X POST http://localhost:8088/api/v1/applications \
     -H "Authorization: Bearer $TOKEN" -H "content-type: application/json" \
-    -d '{"name":"team-foo-agent","team":"foo"}')
+    -d '{"name":"team-foo-agent","team":"foo","service_ids":[]}')
 APP_ID=$(echo "$APP" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 
-# 签发 key（明文只会返回一次！）
+# 授权该应用可调用的服务（service_ids 为完整集合，按需替换）
+curl -s -X PATCH "http://localhost:8088/api/v1/applications/$APP_ID" \
+    -H "Authorization: Bearer $TOKEN" -H "content-type: application/json" \
+    -d '{"service_ids":[1, 2]}' >/dev/null
+
+# 签发 key（明文只会返回一次！只需选择所属应用，权限由应用的服务列表决定）
 curl -s -X POST http://localhost:8088/api/v1/api-keys \
     -H "Authorization: Bearer $TOKEN" -H "content-type: application/json" \
-    -d "{\"name\":\"team-foo prod\",\"owner_type\":\"application\",\"owner_id\":$APP_ID}" \
+    -d "{\"name\":\"team-foo prod\",\"application_id\":$APP_ID}" \
     | python3 -m json.tool
 # → 把 plaintext 字段安全地交给 Agent 团队（只此一次）
 ```

@@ -1,15 +1,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage } from 'element-plus';
 import { getService, updateService, type McpService } from '@/api/services';
 import { listApplications, type Application } from '@/api/applications';
-import {
-  listServicePermissions,
-  grantPermission,
-  revokePermission,
-  type Permission,
-} from '@/api/permissions';
+import { listServicePermissions, type Permission } from '@/api/permissions';
 import { useAuthStore } from '@/stores/auth';
 import PageHeader from '@/components/common/PageHeader.vue';
 import StatusTag from '@/components/common/StatusTag.vue';
@@ -29,12 +24,6 @@ const tab = ref('overview');
 const permissions = ref<Permission[]>([]);
 const permLoading = ref(false);
 const apps = ref<Application[]>([]);
-const grantDialogOpen = ref(false);
-const grantForm = ref<{ application_id: number | null; note: string }>({
-  application_id: null,
-  note: '',
-});
-const granting = ref(false);
 
 const qpsDraft = ref<number | null>(null);
 const qpsSaving = ref(false);
@@ -63,11 +52,6 @@ function clearQpsDraft() {
   qpsDraft.value = null;
 }
 
-const availableApps = computed(() => {
-  const granted = new Set(permissions.value.map((p) => p.application_id));
-  return apps.value.filter((a) => !granted.has(a.id));
-});
-
 function appNameById(id: number): string {
   return apps.value.find((a) => a.id === id)?.name ?? '(unknown)';
 }
@@ -86,44 +70,6 @@ async function reloadPermissions() {
 async function reloadApps() {
   const list = await listApplications();
   apps.value = list.items;
-}
-
-function openGrantDialog() {
-  grantForm.value = { application_id: null, note: '' };
-  grantDialogOpen.value = true;
-}
-
-async function onGrant() {
-  if (!service.value || !grantForm.value.application_id) return;
-  granting.value = true;
-  try {
-    await grantPermission(
-      service.value.slug,
-      grantForm.value.application_id,
-      grantForm.value.note || undefined,
-    );
-    ElMessage.success('已授权');
-    grantDialogOpen.value = false;
-    await reloadPermissions();
-  } finally {
-    granting.value = false;
-  }
-}
-
-async function onRevoke(applicationId: number) {
-  if (!service.value) return;
-  try {
-    await ElMessageBox.confirm(
-      '撤销后，该应用将立刻无法调用本服务（最长 30 秒生效）',
-      '确认撤销',
-      { type: 'warning' },
-    );
-  } catch {
-    return;
-  }
-  await revokePermission(service.value.slug, applicationId);
-  ElMessage.success('已撤销');
-  await reloadPermissions();
 }
 
 async function load() {
@@ -220,84 +166,30 @@ onMounted(load);
           </div>
         </div>
       </el-tab-pane>
-      <el-tab-pane label="授权应用" name="permissions">
+      <el-tab-pane :label="`授权应用（${permissions.length}）`" name="permissions">
         <div v-loading="permLoading" class="perm-panel">
           <div class="perm-panel__header">
             <span class="perm-panel__title">授权应用</span>
-            <el-button
-              v-if="canEdit"
-              type="primary"
-              size="small"
-              @click="openGrantDialog"
-            >
-              <Icon name="plus" :size="14" /> 授权
-            </el-button>
+            <span class="perm-panel__hint">
+              授权由应用自主管理：在
+              <router-link to="/applications">应用列表</router-link>
+              的对应应用详情中勾选/取消本服务。
+            </span>
           </div>
           <el-table :data="permissions" empty-text="暂无授权应用" style="width: 100%;">
             <el-table-column prop="application_id" label="应用 ID" width="100" />
             <el-table-column label="应用名称">
-              <template #default="{ row }">{{ appNameById(row.application_id) }}</template>
+              <template #default="{ row }">
+                <router-link :to="`/applications/${row.application_id}`">
+                  {{ appNameById(row.application_id) }}
+                </router-link>
+              </template>
             </el-table-column>
             <el-table-column label="授权时间" width="200">
               <template #default="{ row }">{{ formatDateTime(row.granted_at) }}</template>
             </el-table-column>
-            <el-table-column prop="note" label="备注">
-              <template #default="{ row }">{{ row.note || '—' }}</template>
-            </el-table-column>
-            <el-table-column label="操作" width="100">
-              <template #default="{ row }">
-                <el-button
-                  type="danger"
-                  size="small"
-                  link
-                  :disabled="!canEdit"
-                  @click="onRevoke(row.application_id)"
-                >
-                  撤销
-                </el-button>
-              </template>
-            </el-table-column>
           </el-table>
         </div>
-
-        <el-dialog v-model="grantDialogOpen" title="授权应用调用此服务" width="480">
-          <el-form :model="grantForm" label-width="80px">
-            <el-form-item label="应用">
-              <el-select
-                v-model="grantForm.application_id"
-                filterable
-                placeholder="选择应用"
-                style="width: 100%;"
-              >
-                <el-option
-                  v-for="app in availableApps"
-                  :key="app.id"
-                  :label="`${app.id} · ${app.name}`"
-                  :value="app.id"
-                />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="备注">
-              <el-input
-                v-model="grantForm.note"
-                maxlength="200"
-                placeholder="可选"
-                show-word-limit
-              />
-            </el-form-item>
-          </el-form>
-          <template #footer>
-            <el-button @click="grantDialogOpen = false">取消</el-button>
-            <el-button
-              type="primary"
-              :loading="granting"
-              :disabled="!grantForm.application_id"
-              @click="onGrant"
-            >
-              确认授权
-            </el-button>
-          </template>
-        </el-dialog>
       </el-tab-pane>
       <el-tab-pane label="调用统计" name="stats">
         <div class="text-secondary" style="padding: 16px;">
@@ -344,6 +236,10 @@ onMounted(load);
   font-size: var(--text-base);
   font-weight: 500;
   color: var(--color-gray-800);
+}
+.perm-panel__hint {
+  font-size: var(--text-xs);
+  color: var(--color-gray-500);
 }
 .qps-edit {
   display: flex;

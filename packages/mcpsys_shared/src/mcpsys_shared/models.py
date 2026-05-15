@@ -226,7 +226,11 @@ class AuditEvent(Base):
 
 class ServicePermission(Base):
     """White-list grant: (application × service). Row exists ⇒ allowed.
-    Default-deny semantics: no row means no access."""
+    Default-deny semantics: no row means no access.
+
+    Rows are managed exclusively from the application side (application create /
+    update); the service-detail view is a read-only mirror. `granted_by` records
+    the user who last edited the owning application's service list."""
 
     __tablename__ = "service_permissions"
     __table_args__ = (
@@ -245,4 +249,3 @@ class ServicePermission(Base):
     granted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    note: Mapped[str | None] = mapped_column(Text)

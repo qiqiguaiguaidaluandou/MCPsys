@@ -88,9 +88,7 @@ async def main(dry_run: bool) -> int:
 
             for app_id, svc_id in to_create:
                 s.add(
-                    ServicePermission(
-                        application_id=app_id, service_id=svc_id, note="bootstrap v1a"
-                    )
+                    ServicePermission(application_id=app_id, service_id=svc_id)
                 )
 
             try:

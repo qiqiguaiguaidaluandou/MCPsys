@@ -23,8 +23,8 @@ export function listApiKeys(params?: { owner_type?: OwnerType; owner_id?: number
 
 export interface IssueApiKeyPayload {
   name: string;
-  owner_type: OwnerType;
-  owner_id: number;
+  // Key 永远归属某个应用
+  application_id: number;
   expires_at?: string;
   rate_limit_qps?: number | null;
 }

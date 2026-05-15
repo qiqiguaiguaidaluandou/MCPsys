@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, watch } from 'vue';
-import { issueApiKey, type OwnerType } from '@/api/api-keys';
+import { issueApiKey } from '@/api/api-keys';
 import { listApplications, type Application } from '@/api/applications';
 import { ElMessage } from 'element-plus';
 import Icon from '@/components/icons/Icon.vue';
@@ -21,13 +21,11 @@ const apps = ref<Application[]>([]);
 
 const form = reactive<{
   name: string;
-  owner_type: OwnerType;
-  owner_id: number | null;
+  application_id: number | null;
   rate_limit_qps: number | null;
 }>({
   name: '',
-  owner_type: 'application',
-  owner_id: null,
+  application_id: null,
   rate_limit_qps: null,
 });
 
@@ -37,8 +35,7 @@ watch(() => props.modelValue, async (v) => {
   if (v) {
     stage.value = 'form';
     form.name = '';
-    form.owner_type = 'application';
-    form.owner_id = props.defaultApplicationId ?? null;
+    form.application_id = props.defaultApplicationId ?? null;
     form.rate_limit_qps = null;
     result.value = null;
     apps.value = (await listApplications()).items;
@@ -46,16 +43,15 @@ watch(() => props.modelValue, async (v) => {
 });
 
 async function onSubmit() {
-  if (!form.name || !form.owner_id) {
-    ElMessage.warning('请填写名称和所属');
+  if (!form.name || !form.application_id) {
+    ElMessage.warning('请填写名称并选择所属应用');
     return;
   }
   submitting.value = true;
   try {
     const resp = await issueApiKey({
       name: form.name,
-      owner_type: form.owner_type,
-      owner_id: form.owner_id,
+      application_id: form.application_id,
       rate_limit_qps: form.rate_limit_qps,
     });
     result.value = { plaintext: resp.plaintext, prefix: resp.key_prefix };
@@ -98,19 +94,16 @@ function selectAll(e: MouseEvent) {
         <el-form-item label="名称" required>
           <el-input v-model="form.name" placeholder="例如：team-foo prod" />
         </el-form-item>
-        <el-form-item label="归属类型">
-          <el-radio-group v-model="form.owner_type">
-            <el-radio-button value="application">应用</el-radio-button>
-            <el-radio-button value="user">用户</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item v-if="form.owner_type === 'application'" label="选择应用" required>
-          <el-select v-model="form.owner_id" placeholder="选择应用" style="width: 100%">
+        <el-form-item label="所属应用" required>
+          <el-select
+            v-model="form.application_id"
+            filterable
+            placeholder="选择应用"
+            style="width: 100%"
+          >
             <el-option v-for="a in apps" :key="a.id" :value="a.id" :label="`${a.name} (id=${a.id})`" />
           </el-select>
-        </el-form-item>
-        <el-form-item v-else label="用户 ID" required>
-          <el-input-number v-model="form.owner_id" :min="1" style="width: 200px;" />
+          <span class="qps-hint">Key 的可调用服务由所属应用的服务授权决定</span>
         </el-form-item>
         <el-form-item label="QPS 限流">
           <el-input-number

@@ -19,6 +19,7 @@ class Action:
     USER_DELETE          = "user.delete"
     USER_PASSWORD_CHANGE = "user.password_change"  # noqa: S105 — action string, not a password
     APPLICATION_CREATE   = "application.create"
+    APPLICATION_UPDATE   = "application.update"
     API_KEY_ISSUE        = "api_key.issue"
     API_KEY_REVOKE       = "api_key.revoke"
     API_KEY_UPDATE       = "api_key.update"
@@ -26,8 +27,6 @@ class Action:
     SERVICE_CREATE       = "service.create"
     SERVICE_UPDATE       = "service.update"
     SERVICE_DELETE       = "service.delete"
-    SERVICE_PERMISSION_GRANT  = "service_permission.grant"
-    SERVICE_PERMISSION_REVOKE = "service_permission.revoke"
 
 
 # Column names that must NEVER end up in audit before/after jsonb.

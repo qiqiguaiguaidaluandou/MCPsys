@@ -65,8 +65,7 @@ async def test_create_api_key_returns_plaintext_once(client, admin_and_app):
         headers=auth_header(admin),
         json={
             "name": "agent-x main",
-            "owner_type": "application",
-            "owner_id": app_obj.id,
+            "application_id": app_obj.id,
         },
     )
     assert resp.status_code == 201
@@ -81,7 +80,7 @@ async def test_list_api_keys_no_plaintext(client, admin_and_app):
     await client.post(
         "/api/v1/api-keys",
         headers=auth_header(admin),
-        json={"name": "k1", "owner_type": "application", "owner_id": app_obj.id},
+        json={"name": "k1", "application_id": app_obj.id},
     )
     resp = await client.get("/api/v1/api-keys", headers=auth_header(admin))
     assert resp.status_code == 200
@@ -96,7 +95,7 @@ async def test_revoke_api_key(client, admin_and_app):
     create = await client.post(
         "/api/v1/api-keys",
         headers=auth_header(admin),
-        json={"name": "k2", "owner_type": "application", "owner_id": app_obj.id},
+        json={"name": "k2", "application_id": app_obj.id},
     )
     key_id = create.json()["id"]
     resp = await client.delete(f"/api/v1/api-keys/{key_id}", headers=auth_header(admin))
@@ -111,7 +110,7 @@ async def test_permanent_delete_requires_revoke(client, admin_and_app):
     create = await client.post(
         "/api/v1/api-keys",
         headers=auth_header(admin),
-        json={"name": "k3", "owner_type": "application", "owner_id": app_obj.id},
+        json={"name": "k3", "application_id": app_obj.id},
     )
     key_id = create.json()["id"]
 
@@ -149,8 +148,7 @@ async def test_create_api_key_with_qps(client, admin):
         headers=auth_header(admin),
         json={
             "name": "qps-key",
-            "owner_type": "application",
-            "owner_id": app_id,
+            "application_id": app_id,
             "rate_limit_qps": 10,
         },
     )
@@ -175,7 +173,7 @@ async def test_patch_api_key_qps(client, admin):
     create_resp = await client.post(
         "/api/v1/api-keys",
         headers=auth_header(admin),
-        json={"name": "k2", "owner_type": "application", "owner_id": app_id},
+        json={"name": "k2", "application_id": app_id},
     )
     key_id = create_resp.json()["id"]
 
@@ -248,8 +246,7 @@ async def test_audit_api_key_issue(client, admin, application, session_factory):
         headers=auth_header(admin),
         json={
             "name": "audit-issue-key",
-            "owner_type": "application",
-            "owner_id": application.id,
+            "application_id": application.id,
         },
     )
     assert resp.status_code == 201

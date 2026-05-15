@@ -1,5 +1,8 @@
 # V1-A · 访问控制 & 限流 — 设计文档
 
+> **2026-05-15 部分被取代**：§3.1（`service_permissions.note`）、§4–§6 中关于服务侧手动 grant / revoke 的 API 与 UI，
+> 现已改为应用驱动授权 —— 见 `2026-05-15-app-driven-authz-design.md`。本文剩余部分（限流、`PolicyCache`、默认拒绝、commit-then-publish 不变式）仍然有效。
+
 - **状态**：已批准，待落实施计划
 - **范围**：MCPsys v1 的第一段（共 3 段），仅覆盖 service 级白名单授权和 per-key/per-service 限流
 - **依赖**：MVP 已部署（2026-05-06），网关、控制台、Web 控制面已可用

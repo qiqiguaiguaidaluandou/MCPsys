@@ -19,6 +19,7 @@ const ACTIONS: { value: string; label: string; group: string }[] = [
   { value: 'user.delete',           label: '删除用户',       group: 'user' },
   { value: 'user.password_change',  label: '修改密码',       group: 'user' },
   { value: 'application.create',    label: '创建应用',       group: 'application' },
+  { value: 'application.update',    label: '修改应用',       group: 'application' },
   { value: 'api_key.issue',         label: '签发 API Key',  group: 'api_key' },
   { value: 'api_key.revoke',        label: '吊销 API Key',  group: 'api_key' },
   { value: 'api_key.update',        label: '修改 API Key',  group: 'api_key' },

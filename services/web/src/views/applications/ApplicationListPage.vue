@@ -2,6 +2,7 @@
 import { ref, onMounted, reactive } from 'vue';
 import { useRouter } from 'vue-router';
 import { listApplications, createApplication, type Application } from '@/api/applications';
+import { listServices, type McpService } from '@/api/services';
 import PageHeader from '@/components/common/PageHeader.vue';
 import DataTable from '@/components/common/DataTable.vue';
 import RelativeTime from '@/components/common/RelativeTime.vue';
@@ -11,12 +12,25 @@ import { ElMessage } from 'element-plus';
 const router = useRouter();
 const items = ref<Application[]>([]);
 const loading = ref(false);
+const services = ref<McpService[]>([]);
+
+function emptyForm() {
+  return { name: '', team: '', description: '', service_ids: [] as number[] };
+}
 
 const newDialog = reactive({
   visible: false,
-  form: { name: '', team: '', description: '' },
+  form: emptyForm(),
   submitting: false,
 });
+
+async function openCreate() {
+  newDialog.form = emptyForm();
+  if (services.value.length === 0) {
+    services.value = (await listServices()).items;
+  }
+  newDialog.visible = true;
+}
 
 async function load() {
   loading.value = true;
@@ -38,10 +52,11 @@ async function onCreate() {
       name: newDialog.form.name,
       team: newDialog.form.team || undefined,
       description: newDialog.form.description || undefined,
+      service_ids: newDialog.form.service_ids,
     });
     ElMessage.success('应用创建成功');
     newDialog.visible = false;
-    newDialog.form = { name: '', team: '', description: '' };
+    newDialog.form = emptyForm();
     await load();
   } finally {
     newDialog.submitting = false;
@@ -54,7 +69,7 @@ onMounted(load);
 <template>
   <PageHeader title="应用" description="Agent 在系统中的归属主体；一个应用可以拥有多个 API Key">
     <template #actions>
-      <el-button type="primary" @click="newDialog.visible = true">
+      <el-button type="primary" @click="openCreate">
         <Icon name="plus" :size="14" /> 新建应用
       </el-button>
     </template>
@@ -70,6 +85,9 @@ onMounted(load);
       <template #default="{ row }: { row: Application }">{{ row.team || '—' }}</template>
     </el-table-column>
     <el-table-column prop="owner_user_id" label="创建人 ID" width="120" />
+    <el-table-column label="可调服务" width="110">
+      <template #default="{ row }: { row: Application }">{{ row.service_ids?.length ?? 0 }} 个</template>
+    </el-table-column>
     <el-table-column label="描述" min-width="240" show-overflow-tooltip>
       <template #default="{ row }: { row: Application }">{{ row.description || '—' }}</template>
     </el-table-column>
@@ -94,6 +112,23 @@ onMounted(load);
       <el-form-item label="描述">
         <el-input v-model="newDialog.form.description" type="textarea" :rows="3" />
       </el-form-item>
+      <el-form-item label="可调用服务">
+        <el-select
+          v-model="newDialog.form.service_ids"
+          multiple
+          filterable
+          placeholder="选择该应用可以调用的服务"
+          style="width: 100%"
+        >
+          <el-option
+            v-for="s in services"
+            :key="s.id"
+            :value="s.id"
+            :label="`${s.slug} · ${s.display_name}`"
+          />
+        </el-select>
+        <span class="form-hint">只有勾选的服务能被该应用调用，之后可在应用详情页随时调整</span>
+      </el-form-item>
     </el-form>
     <template #footer>
       <el-button @click="newDialog.visible = false">取消</el-button>
@@ -101,3 +136,12 @@ onMounted(load);
     </template>
   </el-dialog>
 </template>
+
+<style scoped>
+.form-hint {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--color-gray-500);
+}
+</style>

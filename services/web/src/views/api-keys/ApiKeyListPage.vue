@@ -8,6 +8,7 @@ import {
   updateApiKey,
   type ApiKey,
 } from '@/api/api-keys';
+import { listApplications, type Application } from '@/api/applications';
 import { useAuthStore } from '@/stores/auth';
 import PageHeader from '@/components/common/PageHeader.vue';
 import DataTable from '@/components/common/DataTable.vue';
@@ -22,6 +23,7 @@ const auth = useAuthStore();
 const items = ref<ApiKey[]>([]);
 const loading = ref(false);
 const issueOpen = ref(false);
+const apps = ref<Application[]>([]);
 
 const canEdit = computed(() => auth.hasRole('admin', 'operator'));
 
@@ -32,6 +34,15 @@ function formatQps(qps: number | null | undefined): string {
   if (qps === null || qps === undefined) return '不限';
   if (qps === 0) return '停用 (0)';
   return `${qps} QPS`;
+}
+
+function ownerLabel(key: ApiKey): string {
+  if (key.owner_type === 'application') {
+    const app = apps.value.find((a) => a.id === key.owner_id);
+    return app ? `${app.name}` : `应用 #${key.owner_id}`;
+  }
+  // 历史遗留：user 类型的 Key 已不再签发，且通过迁移自动吊销
+  return `用户 #${key.owner_id}（已弃用）`;
 }
 
 function onQpsPopoverShow(key: ApiKey) {
@@ -52,7 +63,9 @@ async function onSaveQps(key: ApiKey) {
 async function load() {
   loading.value = true;
   try {
-    items.value = (await listApiKeys()).items;
+    const [keyList, appList] = await Promise.all([listApiKeys(), listApplications()]);
+    items.value = keyList.items;
+    apps.value = appList.items;
   } finally {
     loading.value = false;
   }
@@ -104,9 +117,13 @@ onMounted(load);
       </template>
     </el-table-column>
     <el-table-column prop="name" label="名称" min-width="200" />
-    <el-table-column label="归属" width="160">
+    <el-table-column label="所属应用" width="200">
       <template #default="{ row }: { row: ApiKey }">
-        {{ row.owner_type }} #{{ row.owner_id }}
+        <router-link
+          v-if="row.owner_type === 'application'"
+          :to="`/applications/${row.owner_id}`"
+        >{{ ownerLabel(row) }}</router-link>
+        <span v-else class="text-secondary">{{ ownerLabel(row) }}</span>
       </template>
     </el-table-column>
     <el-table-column label="QPS 限流" width="180">
