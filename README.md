@@ -32,7 +32,7 @@ Endpoints:
 | `http://localhost:8088/api/v1/...` | Management API (JWT) |
 | `http://localhost:8088/api/v1/docs` | Swagger UI |
 | `http://localhost:8088/mcp/{slug}` | MCP traffic gateway (API Key) |
-| `http://localhost:8088/grafana/` | Monitoring dashboard |
+| `http://localhost:8088/dashboard` | Native-rendered overview dashboard (v1-d) |
 
 ## Development
 

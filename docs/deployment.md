@@ -13,7 +13,7 @@
 | Linux | 任意主流发行版（Ubuntu 22.04+ / CentOS 8+ 推荐） | `uname -a` |
 | Docker Engine | 24.0+ | `docker --version` |
 | Docker Compose | v2.20+（命令是 `docker compose`，非 `docker-compose`） | `docker compose version` |
-| 可用磁盘 | ≥ 20 GB（postgres + grafana + 镜像） | `df -h` |
+| 可用磁盘 | ≥ 20 GB（postgres + 镜像） | `df -h` |
 | 可用内存 | ≥ 2 GB（postgres 占大头） | `free -h` |
 | 开放端口 | 8088（对外）；其他端口仅容器内通信 | `ss -tlnp \| grep :8088` |
 | Git（可选） | 任意版本，仅用于代码拉取 | `git --version` |
@@ -60,7 +60,7 @@ cd mcpsys
 
 ```bash
 rsync -avz --exclude='.venv/' --exclude='postgres-data/' --exclude='redis-data/' \
-      --exclude='grafana-data/' --exclude='.env' \
+      --exclude='.env' \
       /dataspace/kqspace/MCPsys/ user@deploy-host:/opt/mcpsys/
 ```
 
@@ -70,8 +70,7 @@ rsync -avz --exclude='.venv/' --exclude='postgres-data/' --exclude='redis-data/'
 # 源机器
 cd /dataspace/kqspace
 tar --exclude='MCPsys/.venv' --exclude='MCPsys/postgres-data' \
-    --exclude='MCPsys/redis-data' --exclude='MCPsys/grafana-data' \
-    --exclude='MCPsys/.env' \
+    --exclude='MCPsys/redis-data' --exclude='MCPsys/.env' \
     -czf mcpsys.tgz MCPsys/
 scp mcpsys.tgz user@deploy-host:/opt/
 
@@ -124,8 +123,6 @@ openssl rand -base64 48
 | `JWT_EXPIRES_MINUTES` | `60` | JWT 过期时间 |
 | `GATEWAY_PORT` | `8088` | （容器内端口，外部走 nginx） |
 | `CONTROL_PLANE_PORT` | `8000` | （同上） |
-| `GRAFANA_PORT` | `3000` | （同上） |
-| `GRAFANA_ADMIN_PASSWORD` | `admin` | **生产环境必改** |
 | `LOG_LEVEL` | `INFO` | 应用日志级别 |
 
 > ⚠️ `.env` 已在 `.gitignore` 中，不会被 commit。**请妥善保管这个文件**：丢失了 JWT_SECRET 会导致所有已签发的 token 失效；丢失 POSTGRES_PASSWORD 会让你无法连库。把它存进企业密码管理器是好习惯。
@@ -194,9 +191,9 @@ docker compose exec control-plane python /app/scripts/seed_admin.py admin '<你�
 | 管理 API（OpenAPI 文档） | `http://<host>:8088/api/v1/openapi.json` | 给前端/集成方对照接口 |
 | 管理 API（Swagger UI） | `http://<host>:8088/api/v1/docs` | 浏览器交互调试 |
 | MCP 流量入口 | `POST http://<host>:8088/mcp/<service-slug>` | Agent 调用入口 |
-| Grafana | `http://<host>:8088/grafana/` | 监控面板，登录 `admin / <GRAFANA_ADMIN_PASSWORD>` |
+| 仪表盘 | `http://<host>:8088/dashboard` | v1-d 原生可视化（KPI + 时序 + Top 榜），登录后从侧边栏「仪表盘」进入 |
 
-进 Grafana 后默认会看到 "MCPsys" 文件夹下的 "MCP Overview" 仪表盘（4 个面板：24h 调用总数 / 错误率 / Top 服务 / 每分钟调用）。冒烟跑完后应该能看到 1-2 条数据。
+冒烟跑完后仪表盘默认窗口（24h）应能看到 1-2 条调用记录、4 张 BarChart 上能看到 smoke-svc / smoke-app 各占一行。
 
 ---
 
@@ -304,10 +301,9 @@ gunzip -c /var/backups/mcpsys/mcpsys-20260601.sql.gz \
 
 > ⚠️ 恢复前先 `docker compose stop control-plane gateway`，避免应用同时写入。
 
-### Grafana / Redis 数据
+### Redis 数据
 
-- Grafana 配置和 dashboards 走的是 provisioning（`grafana/provisioning/`），重建容器不丢；用户自定义在 UI 创建的图表才需要备份 `grafana-data` volume
-- Redis 只是缓存，丢了无影响
+- Redis 只是缓存（API Key 鉴权 / 限流 token bucket / stats 30s 缓存），丢了无影响，重启后会自然回填
 
 ---
 
@@ -359,11 +355,13 @@ docker compose logs <service-name> --tail=100
 - slug 拼错或服务被软删除：`SELECT slug, status FROM mcp_services`
 - 软删除过的服务 `status='disabled'`，重新启用：`UPDATE mcp_services SET status='active' WHERE slug='xxx'` 或通过 `PATCH /api/v1/services/<slug>` 把 status 改回 active
 
-### Grafana 看不到数据
+### 仪表盘看不到数据
 
-- 检查 datasource 是否连上：Grafana → Connections → Data sources → "MCPsys Postgres" → Test
-- 容器间 DNS：在 grafana 容器内 `nc -vz postgres 5432` 应该能通
 - 数据存在性：`SELECT count(*) FROM call_logs;` 返回非 0 才会有数据
+- 缓存窗口：stats API 有 30s（range=15m 时 10s）缓存。要立即刷新到最新数据可
+  `docker compose exec redis redis-cli FLUSHDB`
+- 鉴权：仪表盘只对登录用户可见；登录后从侧边栏「仪表盘」进入。viewer 可读聚合
+  数据，不能看 call_logs 详情
 
 ### 想把日志保留时间缩短
 
@@ -399,7 +397,7 @@ UPDATE call_logs SET request_body=NULL, response_body=NULL
 .env.example                                # 环境变量模板
 compose.yaml                                # 服务编排
 nginx/nginx.conf                            # 反向代理
-grafana/provisioning/                       # Grafana 自动配置
+grafana/provisioning/                       # 历史 Grafana provisioning（v1-d 后已停用，留作参考）
 scripts/seed_admin.py                       # 创建初始 admin
 scripts/smoke.sh                            # 后端端到端冒烟
 scripts/web-smoke.sh                        # 前端冒烟（HTTP 探活）

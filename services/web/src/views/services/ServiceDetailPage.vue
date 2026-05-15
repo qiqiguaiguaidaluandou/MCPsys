@@ -193,7 +193,9 @@ onMounted(load);
       </el-tab-pane>
       <el-tab-pane label="调用统计" name="stats">
         <div class="text-secondary" style="padding: 16px;">
-          调用统计图表将在本服务接入 Grafana 子面板后显示（v1）。
+          本服务调用统计将在 v1-d PR4 中以原生 KPI + 时序图呈现；当前可通过
+          <router-link to="/dashboard">仪表盘</router-link>
+          看全局视图，并在 BarChart 「Top 服务」 中点击本服务跳转。
         </div>
       </el-tab-pane>
       <el-tab-pane label="健康历史" name="health">

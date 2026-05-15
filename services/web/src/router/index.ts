@@ -20,7 +20,14 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/',
+    // 保持默认登录后落地 /services；仪表盘作为可单独导航的页面，路径 /dashboard。
     redirect: { name: 'ServiceList' },
+  },
+  {
+    path: '/dashboard',
+    name: 'Dashboard',
+    component: () => import('@/views/dashboard/DashboardPage.vue'),
+    meta: { requiresAuth: true, layout: 'app', title: 'nav.dashboard' },
   },
   {
     path: '/services',

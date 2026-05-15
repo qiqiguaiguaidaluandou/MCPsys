@@ -24,6 +24,7 @@ interface MenuItem {
 }
 
 const menu = computed<MenuItem[]>(() => [
+  { key: 'dashboard', routeName: 'Dashboard', icon: 'layout-dashboard', labelKey: 'nav.dashboard' },
   {
     key: 'services-group', icon: 'boxes', labelKey: 'nav.services',
     children: [

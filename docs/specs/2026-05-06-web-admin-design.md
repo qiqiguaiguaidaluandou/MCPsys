@@ -6,6 +6,10 @@
 - **范围**: MCPsys 管理后台前端 UI（MVP 阶段）
 - **关联 spec**: `docs/specs/2026-04-30-mcp-management-system-design.md` §2.2、§6 MVP
 
+> **2026-05-15 部分被取代**：本文中关于「DashboardPage 嵌入 Grafana iframe」（§FE-AD-6、§7.3、§§ 仪表盘相关）已在 v1-d
+> 中替换为前端原生 ECharts 可视化。详见 `docs/specs/2026-05-12-v1d-native-visualization-design.md`。其余前端架构（路由、布局、
+> 表单约定、列表 + 详情模式）仍然生效。
+
 ---
 
 ## 1. 背景与目标

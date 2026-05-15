@@ -5,6 +5,10 @@
 - **状态**: Draft（待评审）
 - **范围**: 企业内部 MCP 服务的注册、监控、访问控制、配置与生命周期管理
 
+> **2026-05-15 部分被取代**：本文中关于「嵌入 Grafana 渲染调用统计」的内容已在 v1-d 中替换为前端原生 ECharts 可视化。详见
+> `docs/specs/2026-05-12-v1d-native-visualization-design.md`。Grafana 容器、nginx `/grafana/` 反代、`grafana-data` volume 均已下线；
+> `grafana/provisioning/` 目录暂留作参考，将在 v1-d PR6 单独清理。
+
 ---
 
 ## 1. 背景与目标
