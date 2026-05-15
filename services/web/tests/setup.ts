@@ -17,3 +17,13 @@ const mockStorage: MockStorage = {
 };
 
 vi.stubGlobal('localStorage', mockStorage);
+
+// jsdom 没实现 ResizeObserver；vue-echarts 的 autoresize composable 在 mounted
+// 钩子里读它。chart 测试已经把 <v-chart> stub 掉了，但保险起见全局填一个空实现，
+// 避免任何边缘情况下出 ReferenceError。
+class MockResizeObserver {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+}
+vi.stubGlobal('ResizeObserver', MockResizeObserver);

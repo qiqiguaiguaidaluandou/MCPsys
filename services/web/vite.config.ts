@@ -50,5 +50,10 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./tests/setup.ts'],
+    server: {
+      // element-plus / vue-echarts 这些带 .scss / .css 副作用导入的包必须走
+      // Vite transform，否则 Node 原生 ESM 报 "Unknown file extension .scss"。
+      deps: { inline: ['element-plus', 'vue-echarts'] },
+    },
   },
 });
