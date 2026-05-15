@@ -115,17 +115,24 @@ curl -fsS "$BASE/api/v1/call-logs?limit=5" \
     -H "Authorization: Bearer $TOKEN" | python -m json.tool | head -20
 
 echo "[smoke] verifying audit-events ..."
-AUDIT=$(curl -fsS "$BASE/api/v1/audit-events?page_size=10" -H "Authorization: Bearer $TOKEN")
-ACTIONS=$(echo "$AUDIT" | python3 -c "import sys,json; print(' '.join(it['action'] for it in json.load(sys.stdin)['items']))")
-echo "[smoke]   recent actions: $ACTIONS"
-if ! echo "$ACTIONS" | grep -q "service.create"; then
-  echo "[smoke] FAIL: 期望审计记录中有 service.create"; exit 1
-fi
-if ! echo "$ACTIONS" | grep -q "application.create"; then
-  echo "[smoke] FAIL: 期望审计记录中有 application.create"; exit 1
-fi
-if ! echo "$ACTIONS" | grep -q "application.update"; then
-  echo "[smoke] FAIL: 期望审计记录中有 application.update（应用驱动授权）"; exit 1
-fi
+# 用 ?action= 精确过滤、不依赖最近 N 条窗口。service.create 与 application.create
+# 只在首次跑写入；重跑时它们早就被新事件挤出最近 page。改用过滤后任何时候只要
+# 库里存在该 action 即通过。
+check_audit() {
+    local action="$1"
+    local cnt
+    cnt=$(curl -fsS "$BASE/api/v1/audit-events?action=$action&page_size=1" \
+              -H "Authorization: Bearer $TOKEN" \
+              | python3 -c "import sys,json; print(json.load(sys.stdin)['total'])")
+    if [ "$cnt" -lt 1 ]; then
+        echo "[smoke] FAIL: 期望审计记录中有 $action（数据库里一条都没有）"
+        exit 1
+    fi
+    echo "[smoke]   audit action '$action' present (total=$cnt)"
+}
+
+check_audit "service.create"
+check_audit "application.create"
+check_audit "application.update"
 
 echo "[smoke] OK"
