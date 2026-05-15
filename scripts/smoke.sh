@@ -15,6 +15,18 @@ TOKEN=$(curl -fsS -X POST "$BASE/api/v1/auth/login" \
     | python -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 echo "got token: ${TOKEN:0:20}..."
 
+# 任何方式退出都把 smoke-svc 的 QPS 复位到 null：避免上一次跑中段挂掉
+# 留下 rate_limit_qps=1，下一次 PATCH 1→1 是 no-op、不广播 service:invalidate，
+# 桶里又攒满 token，让「burst 3 → 期望 429」假阴性。
+cleanup() {
+    if [ -n "${TOKEN:-}" ]; then
+        curl -fsS -X PATCH "$BASE/api/v1/services/smoke-svc" \
+            -H "Authorization: Bearer $TOKEN" -H "content-type: application/json" \
+            -d '{"rate_limit_qps":null}' >/dev/null 2>&1 || true
+    fi
+}
+trap cleanup EXIT
+
 echo "[smoke] create application (idempotent)"
 curl -fsS -X POST "$BASE/api/v1/applications" \
     -H "Authorization: Bearer $TOKEN" -H "content-type: application/json" \
@@ -68,10 +80,19 @@ curl -fsS -X POST "$BASE/mcp/smoke-svc" \
     -H "Authorization: Bearer $APIKEY" -H "content-type: application/json" \
     -d '{"jsonrpc":"2.0","method":"tools/list","id":1}' >/dev/null
 
+# 先 null 再设 1，保证这次 PATCH 真的是状态变化（否则 1→1 是 no-op，
+# 控制面可能不广播 service:invalidate，gateway 桶里又攒满 token，burst 假阴性）
+echo "[smoke] pre-reset rate_limit_qps=null"
+curl -fsS -X PATCH "$BASE/api/v1/services/smoke-svc" \
+    -H "Authorization: Bearer $TOKEN" -H "content-type: application/json" \
+    -d '{"rate_limit_qps":null}' >/dev/null
+sleep 0.5  # 让 service:invalidate 传播到 gateway，桶被销毁
+
 echo "[smoke] set service rate_limit_qps=1"
 curl -fsS -X PATCH "$BASE/api/v1/services/smoke-svc" \
     -H "Authorization: Bearer $TOKEN" -H "content-type: application/json" \
     -d '{"rate_limit_qps":1}' >/dev/null
+sleep 0.3  # 让新的限流值被 gateway 拉到
 
 echo "[smoke] burst 3 — expect at least one 429"
 SUCC=0; THR=0
@@ -88,11 +109,7 @@ done
 echo "200=$SUCC 429=$THR"
 test "$THR" -ge 1 || { echo "expected at least 1 throttled"; exit 1; }
 
-echo "[smoke] reset rate_limit_qps to null"
-curl -fsS -X PATCH "$BASE/api/v1/services/smoke-svc" \
-    -H "Authorization: Bearer $TOKEN" -H "content-type: application/json" \
-    -d '{"rate_limit_qps":null}' >/dev/null
-
+# rate_limit_qps 的复位由文件顶部的 EXIT trap 统一处理，这里不再显式 reset
 echo "[smoke] query call logs"
 curl -fsS "$BASE/api/v1/call-logs?limit=5" \
     -H "Authorization: Bearer $TOKEN" | python -m json.tool | head -20
