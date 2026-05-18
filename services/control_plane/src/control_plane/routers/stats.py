@@ -63,6 +63,19 @@ def resolve_range(range_: Range, now: datetime | None = None) -> tuple[datetime,
     return to_ts - _RANGE_DELTA[range_], to_ts
 
 
+def _floor_to_bucket(ts: datetime, bucket: Bucket) -> datetime:
+    """把 ts 向下取整到 bucket 边界。timeseries 必须把 from_ts / to_ts 都对齐到
+    bucket 边界，否则 generate_series 产生的桶 ts 与 agg 的 date_trunc(...) 不重合，
+    LEFT JOIN USING (bucket_ts) 全部 miss → 所有桶返回 0。"""
+    if bucket == "1m":
+        return ts.replace(second=0, microsecond=0)
+    if bucket == "5m":
+        return ts.replace(minute=(ts.minute // 5) * 5, second=0, microsecond=0)
+    if bucket == "1h":
+        return ts.replace(minute=0, second=0, microsecond=0)
+    raise ValueError(bucket)
+
+
 def pick_filter(
     service_id: int | None,
     application_id: int | None,
@@ -212,15 +225,24 @@ async def get_timeseries(
 
     async def compute() -> TimeseriesOut:
         from_ts, to_ts = resolve_range(range_)
-        # 不要写 `:from_ts::timestamptz` —— SQLAlchemy text() 的 bind 正则带
-        # 负向前瞻 `(?!:)`，紧跟 `::` 的 `:from_ts` 不会被识别为 bind，导致原
-        # 文 `:from_ts` 发到 asyncpg → PostgresSyntaxError。Python tz-aware
-        # datetime 经 asyncpg 已经是 timestamptz，无需显式 cast。
+        # 对齐到 bucket 边界——所有 _RANGE_DELTA 都是 bucket 的整数倍，所以先
+        # 对齐 to_ts、再 from_ts = to_ts - delta 就同时对齐两端，且窗口宽度
+        # 仍为 range 标称值（可能整体左移 < 1 bucket）。
+        to_ts = _floor_to_bucket(to_ts, eff_bucket)
+        from_ts = to_ts - _RANGE_DELTA[range_]
+        # generate_series 重载选择需要参数类型提示，必须 cast 才能让 PG 在
+        # prepare 阶段选中 (timestamptz, timestamptz, interval) 重载。
+        # 注意不能写 `:from_ts::timestamptz` —— SQLAlchemy text() 的 bind 正
+        # 则带负向前瞻 `(?!:)`，会把 `:from_ts` 切成 `:from_t`，导致 bind
+        # 名错位 → asyncpg 收到原文 `:from_t` 抛 PostgresSyntaxError。
+        # 解决：用 `CAST(:name AS type)` 形式，bind 正则识别，PG 也能定型。
+        # WHERE 子句里的 `ts >= :from_ts` 不用 cast——参数与列 ts(timestamptz)
+        # 比较时 PG 可从列类型推断参数类型。
         sql = text(f"""
 WITH series AS (
   SELECT generate_series(
-    :from_ts,
-    (:to_ts - interval '{_bucket_step(eff_bucket)}'),
+    CAST(:from_ts AS timestamptz),
+    (CAST(:to_ts AS timestamptz) - interval '{_bucket_step(eff_bucket)}'),
     interval '{_bucket_step(eff_bucket)}'
   ) AS bucket_ts
 ),
