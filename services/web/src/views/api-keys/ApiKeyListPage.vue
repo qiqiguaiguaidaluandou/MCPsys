@@ -111,9 +111,9 @@ onMounted(load);
   </PageHeader>
 
   <DataTable :data="items" :loading="loading">
-    <el-table-column label="Prefix" width="140">
+    <el-table-column label="Key" width="140">
       <template #default="{ row }: { row: ApiKey }">
-        <router-link :to="`/api-keys/${row.id}`" class="mono">{{ row.key_prefix }}...</router-link>
+        <span class="mono">{{ row.key_prefix }}...</span>
       </template>
     </el-table-column>
     <el-table-column label="名称" min-width="200">
