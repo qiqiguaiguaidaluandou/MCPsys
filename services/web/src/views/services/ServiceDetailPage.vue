@@ -1,10 +1,18 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
 import { getService, updateService, type McpService } from '@/api/services';
 import { listApplications, type Application } from '@/api/applications';
 import { listServicePermissions, type Permission } from '@/api/permissions';
+import {
+  getOverview,
+  getTimeseries,
+  getBreakdown,
+  type BreakdownRow,
+  type OverviewResp,
+  type TimeseriesResp,
+} from '@/api/stats';
 import { useAuthStore } from '@/stores/auth';
 import PageHeader from '@/components/common/PageHeader.vue';
 import StatusTag from '@/components/common/StatusTag.vue';
@@ -12,6 +20,9 @@ import HealthDot from '@/components/feature/HealthDot.vue';
 import RelativeTime from '@/components/common/RelativeTime.vue';
 import CopyButton from '@/components/common/CopyButton.vue';
 import Icon from '@/components/icons/Icon.vue';
+import KpiCard from '@/components/charts/KpiCard.vue';
+import Sparkline from '@/components/charts/Sparkline.vue';
+import BarChart from '@/components/charts/BarChart.vue';
 import { formatDateTime } from '@/utils/format';
 
 const route = useRoute();
@@ -83,11 +94,60 @@ async function load() {
   }
 }
 
+// ---- 24h 概况（"调用统计" tab） ----
+const overview = ref<OverviewResp | null>(null);
+const overviewLoading = ref(false);
+const sparkline = ref<TimeseriesResp | null>(null);
+const sparkLoading = ref(false);
+const topApps = ref<BreakdownRow[]>([]);
+const topAppsLoading = ref(false);
+let statsLoaded = false;
+
+async function loadStats() {
+  if (!service.value) return;
+  const sid = service.value.id;
+  statsLoaded = true;
+  const filter = { service_id: sid };
+  overviewLoading.value = true;
+  sparkLoading.value = true;
+  topAppsLoading.value = true;
+  await Promise.all([
+    getOverview({ range: '24h', ...filter })
+      .then((r) => (overview.value = r))
+      .finally(() => (overviewLoading.value = false)),
+    getTimeseries({ metric: 'calls', range: '24h', bucket: '1h', ...filter })
+      .then((r) => (sparkline.value = r))
+      .finally(() => (sparkLoading.value = false)),
+    getBreakdown({ dim: 'application', range: '24h', limit: 5, ...filter })
+      .then((r) => (topApps.value = r.rows))
+      .finally(() => (topAppsLoading.value = false)),
+  ]);
+}
+
+watch([tab, service], ([t, s]) => {
+  if (t === 'stats' && s && !statsLoaded) void loadStats();
+});
+
+function pctFormatter(v: string | number | null | undefined): string {
+  if (v == null) return '—';
+  const n = typeof v === 'number' ? v : Number(v);
+  return (n * 100).toFixed(2) + '%';
+}
+function msFormatter(v: string | number | null | undefined): string {
+  if (v == null) return '—';
+  const n = typeof v === 'number' ? v : Number(v);
+  return Math.round(n).toLocaleString() + ' ms';
+}
+
+function onTopAppClick(row: BreakdownRow) {
+  if (row.key != null) router.push(`/applications/${row.key}`);
+}
+
 onMounted(load);
 </script>
 
 <template>
-  <el-button link @click="router.back()" style="margin-bottom: 12px;">
+  <el-button link style="margin-bottom: 12px;" @click="router.back()">
     <Icon name="chevron-left" :size="14" /> 返回
   </el-button>
 
@@ -192,10 +252,53 @@ onMounted(load);
         </div>
       </el-tab-pane>
       <el-tab-pane label="调用统计" name="stats">
-        <div class="text-secondary" style="padding: 16px;">
-          本服务调用统计将在 v1-d PR4 中以原生 KPI + 时序图呈现；当前可通过
-          <router-link to="/dashboard">仪表盘</router-link>
-          看全局视图，并在 BarChart 「Top 服务」 中点击本服务跳转。
+        <div class="stats-block">
+          <div class="stats-block__hint">
+            统计窗口固定 24h；完整视图见
+            <router-link to="/dashboard">仪表盘</router-link>。
+          </div>
+          <div class="kpi-grid">
+            <KpiCard
+              label="24h 调用次数"
+              icon="activity"
+              tone="primary"
+              :value="overview?.calls ?? null"
+              :loading="overviewLoading"
+            />
+            <KpiCard
+              label="24h 错误率"
+              icon="alert-triangle"
+              tone="error"
+              :value="overview?.error_rate ?? null"
+              :loading="overviewLoading"
+              :formatter="pctFormatter"
+            />
+            <KpiCard
+              label="24h P95 延迟"
+              icon="trending-up"
+              tone="warning"
+              :value="overview?.p95_ms ?? null"
+              :loading="overviewLoading"
+              :formatter="msFormatter"
+            />
+          </div>
+          <div class="stats-row">
+            <div class="stats-row__col">
+              <h4 class="stats-row__title">24h 调用趋势</h4>
+              <div v-loading="sparkLoading" class="spark-wrap">
+                <Sparkline :points="sparkline?.points ?? []" :height="64" />
+              </div>
+            </div>
+            <div class="stats-row__col">
+              <h4 class="stats-row__title">Top 5 调用方应用</h4>
+              <BarChart
+                :rows="topApps"
+                :loading="topAppsLoading"
+                :height="220"
+                @row-click="onTopAppClick"
+              />
+            </div>
+          </div>
         </div>
       </el-tab-pane>
       <el-tab-pane label="健康历史" name="health">
@@ -252,5 +355,41 @@ onMounted(load);
   margin-left: var(--space-2);
   color: var(--color-gray-500);
   font-size: var(--text-xs);
+}
+.stats-block {
+  padding: var(--space-2) 0 var(--space-4);
+}
+.stats-block__hint {
+  font-size: var(--text-xs);
+  color: var(--color-gray-500);
+  margin-bottom: var(--space-3);
+}
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+.stats-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+.stats-row__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-gray-700);
+}
+.spark-wrap {
+  background: var(--color-surface);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-base);
+  padding: var(--space-3);
+  min-height: 80px;
+}
+@media (max-width: 960px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .stats-row { grid-template-columns: 1fr; }
 }
 </style>

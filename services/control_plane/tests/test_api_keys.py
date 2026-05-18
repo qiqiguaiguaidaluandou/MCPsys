@@ -90,6 +90,33 @@ async def test_list_api_keys_no_plaintext(client, admin_and_app):
     assert any(i["name"] == "k1" for i in items)
 
 
+async def test_get_api_key_by_id(client, admin_and_app):
+    admin, app_obj = admin_and_app
+    create = await client.post(
+        "/api/v1/api-keys",
+        headers=auth_header(admin),
+        json={"name": "k-get", "application_id": app_obj.id, "rate_limit_qps": 5},
+    )
+    key_id = create.json()["id"]
+
+    resp = await client.get(f"/api/v1/api-keys/{key_id}", headers=auth_header(admin))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["id"] == key_id
+    assert body["name"] == "k-get"
+    assert body["rate_limit_qps"] == 5
+    assert body["owner_type"] == "application"
+    assert body["owner_id"] == app_obj.id
+    assert "key_hash" not in body
+    assert "plaintext" not in body
+
+
+async def test_get_api_key_not_found(client, admin_and_app):
+    admin, _ = admin_and_app
+    resp = await client.get("/api/v1/api-keys/9999999", headers=auth_header(admin))
+    assert resp.status_code == 404
+
+
 async def test_revoke_api_key(client, admin_and_app):
     admin, app_obj = admin_and_app
     create = await client.post(

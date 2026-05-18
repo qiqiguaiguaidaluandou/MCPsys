@@ -105,6 +105,22 @@ async def list_api_keys(db: AsyncSession = Depends(get_db)) -> ApiKeyList:
     return ApiKeyList(items=[ApiKeyOut.model_validate(k) for k in items], total=len(items))
 
 
+@router.get(
+    "/{key_id}",
+    response_model=ApiKeyOut,
+    dependencies=[Depends(require_role("admin", "operator", "viewer"))],
+)
+async def get_api_key(
+    key_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> ApiKeyOut:
+    res = await db.execute(select(ApiKey).where(ApiKey.id == key_id))
+    key = res.scalar_one_or_none()
+    if key is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "api key not found")
+    return ApiKeyOut.model_validate(key)
+
+
 @router.delete(
     "/{key_id}",
     status_code=status.HTTP_204_NO_CONTENT,

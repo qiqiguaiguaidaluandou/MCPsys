@@ -113,10 +113,14 @@ onMounted(load);
   <DataTable :data="items" :loading="loading">
     <el-table-column label="Prefix" width="140">
       <template #default="{ row }: { row: ApiKey }">
-        <span class="mono">{{ row.key_prefix }}...</span>
+        <router-link :to="`/api-keys/${row.id}`" class="mono">{{ row.key_prefix }}...</router-link>
       </template>
     </el-table-column>
-    <el-table-column prop="name" label="名称" min-width="200" />
+    <el-table-column label="名称" min-width="200">
+      <template #default="{ row }: { row: ApiKey }">
+        <router-link :to="`/api-keys/${row.id}`">{{ row.name }}</router-link>
+      </template>
+    </el-table-column>
     <el-table-column label="所属应用" width="200">
       <template #default="{ row }: { row: ApiKey }">
         <router-link

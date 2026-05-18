@@ -21,6 +21,10 @@ export function listApiKeys(params?: { owner_type?: OwnerType; owner_id?: number
   return client.get('/api/v1/api-keys', { params }).then((r) => r.data);
 }
 
+export function getApiKey(id: number): Promise<ApiKey> {
+  return client.get(`/api/v1/api-keys/${id}`).then((r) => r.data);
+}
+
 export interface IssueApiKeyPayload {
   name: string;
   // Key 永远归属某个应用

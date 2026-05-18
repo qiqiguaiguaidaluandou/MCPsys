@@ -60,6 +60,12 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, roles: ['admin', 'operator'], layout: 'app', title: 'nav.apiKeys' },
   },
   {
+    path: '/api-keys/:id',
+    name: 'ApiKeyDetail',
+    component: () => import('@/views/api-keys/ApiKeyDetailPage.vue'),
+    meta: { requiresAuth: true, roles: ['admin', 'operator'], layout: 'app' },
+  },
+  {
     path: '/call-logs',
     name: 'CallLogList',
     component: () => import('@/views/call-logs/CallLogListPage.vue'),

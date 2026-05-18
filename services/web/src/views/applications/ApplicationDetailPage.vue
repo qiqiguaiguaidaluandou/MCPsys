@@ -8,10 +8,21 @@ import {
   type Application,
 } from '@/api/applications';
 import { listServices, type McpService } from '@/api/services';
+import {
+  getOverview,
+  getTimeseries,
+  getBreakdown,
+  type BreakdownRow,
+  type OverviewResp,
+  type TimeseriesResp,
+} from '@/api/stats';
 import { useAuthStore } from '@/stores/auth';
 import PageHeader from '@/components/common/PageHeader.vue';
 import RelativeTime from '@/components/common/RelativeTime.vue';
 import Icon from '@/components/icons/Icon.vue';
+import KpiCard from '@/components/charts/KpiCard.vue';
+import Sparkline from '@/components/charts/Sparkline.vue';
+import BarChart from '@/components/charts/BarChart.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -52,9 +63,48 @@ async function load() {
     app.value = appData;
     services.value = svcList.items;
     draft.value = [...appData.service_ids];
+    void loadStats();
   } finally {
     loading.value = false;
   }
+}
+
+// ---- 24h 概况 ----
+const overview = ref<OverviewResp | null>(null);
+const overviewLoading = ref(false);
+const sparkline = ref<TimeseriesResp | null>(null);
+const sparkLoading = ref(false);
+const topServices = ref<BreakdownRow[]>([]);
+const topServicesLoading = ref(false);
+
+async function loadStats() {
+  if (!app.value) return;
+  const filter = { application_id: app.value.id };
+  overviewLoading.value = true;
+  sparkLoading.value = true;
+  topServicesLoading.value = true;
+  await Promise.all([
+    getOverview({ range: '24h', ...filter })
+      .then((r) => (overview.value = r))
+      .finally(() => (overviewLoading.value = false)),
+    getTimeseries({ metric: 'calls', range: '24h', bucket: '1h', ...filter })
+      .then((r) => (sparkline.value = r))
+      .finally(() => (sparkLoading.value = false)),
+    getBreakdown({ dim: 'service', range: '24h', limit: 5, ...filter })
+      .then((r) => (topServices.value = r.rows))
+      .finally(() => (topServicesLoading.value = false)),
+  ]);
+}
+
+function pctFormatter(v: string | number | null | undefined): string {
+  if (v == null) return '—';
+  const n = typeof v === 'number' ? v : Number(v);
+  return (n * 100).toFixed(2) + '%';
+}
+
+function onTopServiceClick(row: BreakdownRow) {
+  // breakdown for dim=service: label 是 slug（与 dashboard 一致）
+  if (row.label) router.push(`/services/${row.label}`);
 }
 
 function resetDraft() {
@@ -95,7 +145,7 @@ onMounted(load);
 </script>
 
 <template>
-  <el-button link @click="router.back()" style="margin-bottom: 12px;">
+  <el-button link style="margin-bottom: 12px;" @click="router.back()">
     <Icon name="chevron-left" :size="14" /> 返回
   </el-button>
 
@@ -120,6 +170,54 @@ onMounted(load);
         <div class="overview__value">{{ app.owner_user_id }}</div>
       </div>
     </div>
+
+    <section class="stats-block">
+      <div class="stats-block__header">
+        <h3 class="stats-block__title">24h 概况</h3>
+        <span class="stats-block__hint">完整视图见<router-link to="/dashboard">仪表盘</router-link></span>
+      </div>
+      <div class="kpi-grid">
+        <KpiCard
+          label="24h 调用次数"
+          icon="activity"
+          tone="primary"
+          :value="overview?.calls ?? null"
+          :loading="overviewLoading"
+        />
+        <KpiCard
+          label="24h 错误率"
+          icon="alert-triangle"
+          tone="error"
+          :value="overview?.error_rate ?? null"
+          :loading="overviewLoading"
+          :formatter="pctFormatter"
+        />
+        <KpiCard
+          label="24h 被限流次数"
+          icon="zap-off"
+          tone="info"
+          :value="overview?.throttled ?? null"
+          :loading="overviewLoading"
+        />
+      </div>
+      <div class="stats-row">
+        <div class="stats-row__col">
+          <h4 class="stats-row__title">24h 调用趋势</h4>
+          <div v-loading="sparkLoading" class="spark-wrap">
+            <Sparkline :points="sparkline?.points ?? []" :height="64" />
+          </div>
+        </div>
+        <div class="stats-row__col">
+          <h4 class="stats-row__title">Top 5 被调服务</h4>
+          <BarChart
+            :rows="topServices"
+            :loading="topServicesLoading"
+            :height="220"
+            @row-click="onTopServiceClick"
+          />
+        </div>
+      </div>
+    </section>
 
     <div style="margin-top: 24px;">
       <h3 style="margin-bottom: 12px;">API Keys</h3>
@@ -227,5 +325,52 @@ onMounted(load);
   margin-top: var(--space-3);
   display: flex;
   gap: var(--space-2);
+}
+.stats-block {
+  margin-top: var(--space-6);
+}
+.stats-block__header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.stats-block__title {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-gray-800);
+}
+.stats-block__hint {
+  font-size: var(--text-xs);
+  color: var(--color-gray-500);
+}
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+.stats-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+.stats-row__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-gray-700);
+}
+.spark-wrap {
+  background: var(--color-surface);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-base);
+  padding: var(--space-3);
+  min-height: 80px;
+}
+@media (max-width: 960px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .stats-row { grid-template-columns: 1fr; }
 }
 </style>
