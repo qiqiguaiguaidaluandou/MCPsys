@@ -212,11 +212,15 @@ async def get_timeseries(
 
     async def compute() -> TimeseriesOut:
         from_ts, to_ts = resolve_range(range_)
+        # 不要写 `:from_ts::timestamptz` —— SQLAlchemy text() 的 bind 正则带
+        # 负向前瞻 `(?!:)`，紧跟 `::` 的 `:from_ts` 不会被识别为 bind，导致原
+        # 文 `:from_ts` 发到 asyncpg → PostgresSyntaxError。Python tz-aware
+        # datetime 经 asyncpg 已经是 timestamptz，无需显式 cast。
         sql = text(f"""
 WITH series AS (
   SELECT generate_series(
-    :from_ts::timestamptz,
-    (:to_ts::timestamptz - interval '{_bucket_step(eff_bucket)}'),
+    :from_ts,
+    (:to_ts - interval '{_bucket_step(eff_bucket)}'),
     interval '{_bucket_step(eff_bucket)}'
   ) AS bucket_ts
 ),
