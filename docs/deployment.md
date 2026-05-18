@@ -397,7 +397,6 @@ UPDATE call_logs SET request_body=NULL, response_body=NULL
 .env.example                                # 环境变量模板
 compose.yaml                                # 服务编排
 nginx/nginx.conf                            # 反向代理
-grafana/provisioning/                       # 历史 Grafana provisioning（v1-d 后已停用，留作参考）
 scripts/seed_admin.py                       # 创建初始 admin
 scripts/smoke.sh                            # 后端端到端冒烟
 scripts/web-smoke.sh                        # 前端冒烟（HTTP 探活）

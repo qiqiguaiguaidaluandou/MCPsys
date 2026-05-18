@@ -466,7 +466,7 @@ curl -fsS "$BASE/api/v1/stats/timeseries?metric=calls&range=1h" -H "Authorizatio
 
 - `compose.yaml`：删除 `grafana` service、`grafana-data` volume、`grafana` 依赖。
 - `nginx/nginx.conf`：删除 `location /grafana/` 块（`nginx.conf:61-63`）。
-- `grafana/provisioning/` 目录：保留在 git 仓库**作为参考**（V1-D plan 阶段写 SQL 时可直接抄过来），但不再被任何服务挂载。后续单独一次 cleanup PR 删除整个目录。
+- `grafana/provisioning/` 目录：已在 PR6（2026-05-18）整目录删除；历史 SQL 可从 v1-d 之前的 git 历史中找回（`git log --all -- grafana/`）。
 - `.env.example`：删除 `GF_*` 相关变量（如有）。
 
 ### 8.2 升级路径
