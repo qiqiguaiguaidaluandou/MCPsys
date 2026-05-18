@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { onMounted, ref, reactive } from 'vue';
+import { onMounted, ref, reactive, computed } from 'vue';
 import { listAuditEvents, type AuditEvent, type AuditEventFilter } from '@/api/audit';
 import { listUsers } from '@/api/users';
 import type { User } from '@/api/types';
+import type { TimeseriesPoint } from '@/api/stats';
 import PageHeader from '@/components/common/PageHeader.vue';
 import DataTable from '@/components/common/DataTable.vue';
 import RelativeTime from '@/components/common/RelativeTime.vue';
+import Sparkline from '@/components/charts/Sparkline.vue';
+import dayjs from 'dayjs';
 
 const items = ref<AuditEvent[]>([]);
 const total = ref(0);
@@ -66,9 +69,54 @@ function actionLabel(v: string): string {
   return ACTIONS.find((a) => a.value === v)?.label ?? v;
 }
 
+// ---- 7d sparkline ----
+// audit 表稀疏，backend page_size 上限 200 通常够；溢出时只画最近 200 条的形状，
+// 视觉上仍能看到节奏，不影响列表查询本身（列表用主 filter）。
+const sparkPoints = ref<TimeseriesPoint[]>([]);
+const sparkLoading = ref(false);
+const sparkTotal = ref(0);
+
+async function loadSparkline() {
+  sparkLoading.value = true;
+  try {
+    const fromTs = dayjs().subtract(7, 'day').toISOString();
+    const data = await listAuditEvents({
+      from_ts: fromTs,
+      page: 1,
+      page_size: 200,
+    });
+    sparkTotal.value = data.total;
+    // 按天桶；起点是 7 天前的零点（toDate）以保证连续日柱
+    const start = dayjs().startOf('day').subtract(6, 'day');
+    const counts = new Map<string, number>();
+    for (let i = 0; i < 7; i++) {
+      counts.set(start.add(i, 'day').format('YYYY-MM-DD'), 0);
+    }
+    for (const ev of data.items) {
+      const day = dayjs(ev.ts).format('YYYY-MM-DD');
+      if (counts.has(day)) counts.set(day, (counts.get(day) ?? 0) + 1);
+    }
+    sparkPoints.value = Array.from(counts.entries()).map(([day, v]) => ({
+      ts: dayjs(day).toISOString(),
+      value: v,
+    }));
+  } finally {
+    sparkLoading.value = false;
+  }
+}
+
+const sparkHint = computed(() => {
+  if (sparkLoading.value) return '加载中…';
+  if (sparkTotal.value === 0) return '7 天内无事件';
+  if (sparkTotal.value > 200) {
+    return `7 天共 ${sparkTotal.value} 条，sparkline 仅展示最近 200 条形状`;
+  }
+  return `7 天共 ${sparkTotal.value} 条`;
+});
+
 onMounted(async () => {
   users.value = (await listUsers()).items;
-  await load();
+  await Promise.all([load(), loadSparkline()]);
 });
 </script>
 
@@ -108,6 +156,14 @@ onMounted(async () => {
 
     <el-button @click="reset">重置</el-button>
     <el-button type="primary" @click="load">查询</el-button>
+  </div>
+
+  <div v-loading="sparkLoading" class="spark-card">
+    <div class="spark-card__legend">
+      <span class="spark-card__title">7 天审计趋势</span>
+      <span class="spark-card__hint">{{ sparkHint }}</span>
+    </div>
+    <Sparkline :points="sparkPoints" :height="64" />
   </div>
 
   <DataTable :data="items" :loading="loading">
@@ -159,7 +215,27 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.filter-bar { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-4); }
+.filter-bar { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-3); }
+.spark-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-base);
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.spark-card__legend {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--color-gray-500);
+  margin-bottom: var(--space-1);
+}
+.spark-card__title {
+  color: var(--color-gray-700);
+  font-weight: var(--font-weight-semibold);
+}
+.spark-card__hint { font-size: var(--text-xs); }
 .diff-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); padding: var(--space-3); }
 .diff-grid.single { grid-template-columns: 1fr; max-width: 600px; }
 .diff-label { font-size: 12px; color: var(--color-gray-500); margin-bottom: 4px; text-transform: uppercase; }

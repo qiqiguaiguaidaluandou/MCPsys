@@ -119,6 +119,54 @@ async def test_filter_by_status(client, operator, seeded_logs):
     assert all(i["status"] == "error" for i in body["items"])
 
 
+@pytest.fixture
+async def tool_seeded_logs(session_factory):
+    async with session_factory() as s:
+        svc = McpService(
+            slug="tool-svc",
+            display_name="TS",
+            endpoint_url="http://x/mcp",
+            transport=TransportType.streamable_http,
+            status=ServiceStatus.active,
+        )
+        s.add(svc)
+        await s.flush()
+        now = datetime.now(UTC)
+        for i, tname in enumerate(["get_weather", "get_weather", "send_email", "send_email", "list_users"]):
+            s.add(
+                CallLog(
+                    ts=now - timedelta(minutes=i),
+                    service_id=svc.id,
+                    tool_name=tname,
+                    status=CallStatus.success,
+                    duration_ms=10,
+                )
+            )
+        await s.commit()
+        return svc.id
+
+
+async def test_filter_by_tool(client, operator, tool_seeded_logs):
+    resp = await client.get(
+        f"/api/v1/call-logs?service_id={tool_seeded_logs}&tool=get_weather",
+        headers=auth_header(operator),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 2
+    assert all(i["tool_name"] == "get_weather" for i in body["items"])
+
+
+async def test_filter_by_tool_empty_value_is_noop(client, operator, tool_seeded_logs):
+    # tool="" 应当被视作未过滤，否则前端清空输入框会查不到任何 tool_name=NULL 的记录
+    resp = await client.get(
+        f"/api/v1/call-logs?service_id={tool_seeded_logs}&tool=",
+        headers=auth_header(operator),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 5
+
+
 async def test_pagination(client, operator, seeded_logs):
     resp = await client.get(
         f"/api/v1/call-logs?service_id={seeded_logs}&limit=2",

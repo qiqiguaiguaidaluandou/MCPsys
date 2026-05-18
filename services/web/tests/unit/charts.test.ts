@@ -111,6 +111,20 @@ describe('Sparkline', () => {
     // shallowMount 把 vue-echarts 渲染为 <echarts-stub>（vue-echarts 组件 name=echarts）
     expect(w.find('echarts-stub').exists()).toBe(true);
   });
+
+  it('renders when only errorPoints have non-zero values', () => {
+    const points: TimeseriesPoint[] = [{ ts: '2026-05-15T00:00:00Z', value: 0 }];
+    const errorPoints: TimeseriesPoint[] = [{ ts: '2026-05-15T00:00:00Z', value: 3 }];
+    const w = shallowMount(Sparkline, { props: { points, errorPoints } });
+    expect(w.find('echarts-stub').exists()).toBe(true);
+  });
+
+  it('shows placeholder when both main and errorPoints are all zero', () => {
+    const points: TimeseriesPoint[] = [{ ts: '2026-05-15T00:00:00Z', value: 0 }];
+    const errorPoints: TimeseriesPoint[] = [{ ts: '2026-05-15T00:00:00Z', value: 0 }];
+    const w = shallowMount(Sparkline, { props: { points, errorPoints } });
+    expect(w.find('.sparkline__empty').text()).toBe('—');
+  });
 });
 
 describe('BarChart', () => {

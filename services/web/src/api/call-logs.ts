@@ -26,8 +26,10 @@ export interface CallLog {
 
 export interface CallLogQuery {
   service_id?: number;
-  status?: CallStatus;
+  application_id?: number;
   api_key_id?: number;
+  status?: CallStatus;
+  tool?: string;
   from?: string;
   to?: string;
   limit?: number;

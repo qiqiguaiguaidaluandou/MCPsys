@@ -58,6 +58,7 @@ async def list_call_logs(
     application_id: int | None = Query(default=None),
     api_key_id: int | None = Query(default=None),
     status_filter: CallStatus | None = Query(default=None, alias="status"),
+    tool: str | None = Query(default=None),
     from_ts: datetime | None = Query(default=None, alias="from"),
     to_ts: datetime | None = Query(default=None, alias="to"),
     limit: int = Query(default=50, ge=1, le=500),
@@ -72,6 +73,8 @@ async def list_call_logs(
         where.append(CallLog.api_key_id == api_key_id)
     if status_filter is not None:
         where.append(CallLog.status == status_filter)
+    if tool is not None and tool != "":
+        where.append(CallLog.tool_name == tool)
     if from_ts is not None:
         where.append(CallLog.ts >= from_ts)
     if to_ts is not None:

@@ -8,24 +8,31 @@ import type { TimeseriesPoint } from '@/api/stats';
 const props = withDefaults(
   defineProps<{
     points: TimeseriesPoint[];
+    /** 可选第二条 series（错误线 / 限流线等），点数组与 points 同长同 ts 才能正常叠加。 */
+    errorPoints?: TimeseriesPoint[];
     height?: number;
     color?: string;
+    errorColor?: string;
   }>(),
-  { height: 32 },
+  { height: 32, errorPoints: () => [], color: undefined, errorColor: undefined },
 );
 
-const isEmpty = computed(
-  () =>
+const hasErrorSeries = computed(
+  () => !!props.errorPoints && props.errorPoints.length > 0,
+);
+
+const isEmpty = computed(() => {
+  const mainEmpty =
     props.points.length === 0 ||
-    props.points.every((p) => p.value == null || p.value === 0),
-);
+    props.points.every((p) => p.value == null || p.value === 0);
+  if (!hasErrorSeries.value) return mainEmpty;
+  const errEmpty =
+    props.errorPoints!.every((p) => p.value == null || p.value === 0);
+  return mainEmpty && errEmpty;
+});
 
-const option = computed(() => ({
-  grid: { left: 0, right: 0, top: 2, bottom: 2, containLabel: false },
-  xAxis: { type: 'time', show: false },
-  yAxis: { type: 'value', show: false },
-  tooltip: { show: false },
-  series: [
+const option = computed(() => {
+  const series: Record<string, unknown>[] = [
     {
       type: 'line',
       symbol: 'none',
@@ -36,8 +43,26 @@ const option = computed(() => ({
       data: props.points.map((p) => [p.ts, p.value ?? 0]),
       color: props.color ?? COLORS.primary(),
     },
-  ],
-}));
+  ];
+  if (hasErrorSeries.value) {
+    series.push({
+      type: 'line',
+      symbol: 'none',
+      smooth: true,
+      sampling: 'lttb',
+      lineStyle: { width: 1.5 },
+      data: props.errorPoints!.map((p) => [p.ts, p.value ?? 0]),
+      color: props.errorColor ?? 'var(--color-error)',
+    });
+  }
+  return {
+    grid: { left: 0, right: 0, top: 2, bottom: 2, containLabel: false },
+    xAxis: { type: 'time', show: false },
+    yAxis: { type: 'value', show: false },
+    tooltip: { show: false },
+    series,
+  };
+});
 </script>
 
 <template>
