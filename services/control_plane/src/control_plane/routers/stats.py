@@ -332,14 +332,17 @@ _DIM_CONFIG: dict[Dim, dict[str, str | bool]] = {
 
 def _build_total_sql(dim: Dim) -> str:
     """other 桶的口径要和 Top 行保持一致：top 行滤掉了 null-dim 行（见 _DIM_CONFIG），
-    total 这里同样滤，否则 other = total - top 会把 null-dim 行计进"其它"，语义混乱。"""
+    total 这里同样滤，否则 other = total - top 会把 null-dim 行计进"其它"，语义混乱。
+
+    注意 status 必须写 cl.status —— mcp_services 也有 status 列，dim=service 时
+    join 后裸 status 会 AmbiguousColumnError。这里没 JOIN，但保持口径一致。"""
     cfg = _DIM_CONFIG[dim]
     null_filter = f"AND {cfg['key_col']} IS NOT NULL" if cfg["null_filter"] else ""
     return f"""
-SELECT count(*)                                           AS total_count,
-       count(*) FILTER (WHERE status != 'success')        AS total_error_count
+SELECT count(*)                                              AS total_count,
+       count(*) FILTER (WHERE cl.status != 'success')        AS total_error_count
 FROM call_logs cl
-WHERE ts >= :from_ts AND ts < :to_ts
+WHERE cl.ts >= :from_ts AND cl.ts < :to_ts
   {null_filter}
   AND (CAST(:service_id     AS integer) IS NULL OR cl.service_id     = :service_id)
   AND (CAST(:application_id AS integer) IS NULL OR cl.application_id = :application_id)
@@ -348,6 +351,9 @@ WHERE ts >= :from_ts AND ts < :to_ts
 
 
 def _build_breakdown_sql(dim: Dim, order_by_errors: bool) -> str:
+    """status 必须写 cl.status —— dim=service 时会 LEFT JOIN mcp_services（也有
+    status 列），裸 status 会 AmbiguousColumnError。ts 同样加 cl. 防御性显式
+    限定，避免将来加 JOIN 表恰好有 ts 列时再炸一次。"""
     cfg = _DIM_CONFIG[dim]
     key_col = cfg["key_col"]
     label_col = cfg["label_col"]
@@ -361,11 +367,11 @@ def _build_breakdown_sql(dim: Dim, order_by_errors: bool) -> str:
     return f"""
 SELECT {key_col}    AS key,
        {label_col}  AS label,
-       count(*)                                       AS count,
-       count(*) FILTER (WHERE status != 'success')    AS error_count
+       count(*)                                          AS count,
+       count(*) FILTER (WHERE cl.status != 'success')    AS error_count
 FROM call_logs cl
 {join}
-WHERE ts >= :from_ts AND ts < :to_ts
+WHERE cl.ts >= :from_ts AND cl.ts < :to_ts
   {null_filter}
   AND (CAST(:service_id     AS integer) IS NULL OR cl.service_id     = :service_id)
   AND (CAST(:application_id AS integer) IS NULL OR cl.application_id = :application_id)
