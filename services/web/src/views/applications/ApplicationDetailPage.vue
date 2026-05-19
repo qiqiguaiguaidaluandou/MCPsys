@@ -281,7 +281,7 @@ onMounted(load);
         style="width: 100%; margin-top: 16px;"
       >
         <el-table-column prop="id" label="服务 ID" width="100" />
-        <el-table-column label="服务 slug" width="220">
+        <el-table-column label="服务标识" width="220">
           <template #default="{ row }: { row: McpService }">
             <router-link :to="`/services/${row.slug}`" class="mono">{{ row.slug }}</router-link>
           </template>

@@ -38,7 +38,7 @@ async function onDelete() {
   const target = deleteDialog.target;
   if (!target) return;
   if (deleteDialog.confirmInput !== target.slug) {
-    ElMessage.warning('请完整输入 slug 以确认');
+    ElMessage.warning('请完整输入服务标识以确认');
     return;
   }
   deleteDialog.submitting = true;
@@ -81,11 +81,11 @@ function resetForm() {
 async function onCreate() {
   const f = newDialog.form;
   if (!f.slug || !f.display_name || !f.endpoint_url) {
-    ElMessage.warning('slug、显示名、端点 URL 为必填');
+    ElMessage.warning('服务标识、显示名、端点 URL 为必填');
     return;
   }
   if (!SLUG_RE.test(f.slug)) {
-    ElMessage.warning('slug 仅允许小写字母、数字与连字符，长度 2-64');
+    ElMessage.warning('服务标识仅允许小写字母、数字与连字符，长度 2-64');
     return;
   }
   newDialog.submitting = true;
@@ -146,7 +146,7 @@ onMounted(load);
   </PageHeader>
 
   <div class="filter-bar">
-    <el-input v-model="search" placeholder="搜索 slug / 名称 / 团队" style="width: 280px;" clearable>
+    <el-input v-model="search" placeholder="搜索服务标识 / 名称 / 团队" style="width: 280px;" clearable>
       <template #prefix><Icon name="search" :size="14" /></template>
     </el-input>
     <el-select v-model="filterStatus" placeholder="状态" clearable style="width: 120px;">
@@ -165,7 +165,7 @@ onMounted(load);
   </div>
 
   <DataTable :data="filtered" :loading="loading">
-    <el-table-column prop="slug" label="Slug" width="200">
+    <el-table-column prop="slug" label="服务标识" width="200">
       <template #default="{ row }: { row: McpService }">
         <span class="mono"><router-link :to="`/services/${row.slug}`">{{ row.slug }}</router-link></span>
       </template>
@@ -209,7 +209,7 @@ onMounted(load);
 
   <el-dialog v-model="newDialog.visible" title="注册新服务" width="520">
     <el-form label-position="top">
-      <el-form-item label="Slug" required>
+      <el-form-item label="服务标识" required>
         <el-input v-model="newDialog.form.slug" placeholder="小写字母/数字/连字符，2-64 字符，例如 weather-mcp" />
       </el-form-item>
       <el-form-item label="显示名" required>
@@ -238,8 +238,8 @@ onMounted(load);
     <template v-if="deleteDialog.target">
       <el-alert type="warning" :closable="false" show-icon>
         <template #title>
-          归档式删除：服务将被禁用、slug 改写为 <code>__archived_{{ deleteDialog.target.id }}</code>，
-          原 slug <strong>{{ deleteDialog.target.slug }}</strong> 释放可被重新注册。
+          归档式删除：服务将被禁用、服务标识改写为 <code>__archived_{{ deleteDialog.target.id }}</code>，
+          原服务标识 <strong>{{ deleteDialog.target.slug }}</strong> 释放可被重新注册。
           历史调用日志保留，可在审计事件中追溯。
         </template>
       </el-alert>
