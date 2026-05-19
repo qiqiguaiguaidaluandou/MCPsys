@@ -1,8 +1,9 @@
 import re
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from mcpsys_shared.models import (
+    AuditEvent,
     HealthStatus,
     McpService,
     ServiceStatus,
@@ -138,6 +139,54 @@ async def get_service(slug: str, db: AsyncSession = Depends(get_db)) -> ServiceO
     if svc is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "service not found")
     return ServiceOut.model_validate(svc)
+
+
+class HealthHistoryItem(BaseModel):
+    ts: datetime
+    from_status: HealthStatus | None
+    to_status: HealthStatus | None
+
+
+class HealthHistoryOut(BaseModel):
+    items: list[HealthHistoryItem]
+
+
+@router.get(
+    "/{slug}/health-history",
+    response_model=HealthHistoryOut,
+    dependencies=[Depends(require_role("admin", "operator", "viewer"))],
+)
+async def get_service_health_history(
+    slug: str,
+    limit: int = Query(default=100, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+) -> HealthHistoryOut:
+    """服务健康变化时间线。数据源 = audit_events 中 action=service.health_change。
+    单独端点而非直接走 /audit-events，是因为后者只对 admin 开放、而服务详情对
+    admin/operator/viewer 三角色都可见；这里收窄字段（不返回 actor / IP）。"""
+    svc = (await db.execute(select(McpService).where(McpService.slug == slug))).scalar_one_or_none()
+    if svc is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "service not found")
+    events = (
+        await db.execute(
+            select(AuditEvent)
+            .where(AuditEvent.target_type == "mcp_service")
+            .where(AuditEvent.target_id == str(svc.id))
+            .where(AuditEvent.action == Action.SERVICE_HEALTH_CHANGE)
+            .order_by(AuditEvent.ts.desc())
+            .limit(limit)
+        )
+    ).scalars().all()
+    return HealthHistoryOut(
+        items=[
+            HealthHistoryItem(
+                ts=e.ts,
+                from_status=(e.before or {}).get("health_status"),
+                to_status=(e.after or {}).get("health_status"),
+            )
+            for e in events
+        ]
+    )
 
 
 @router.patch(

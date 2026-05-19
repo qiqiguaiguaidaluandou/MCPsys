@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -39,9 +41,20 @@ async def lifespan(app: FastAPI):
     app.state.engine = make_engine(settings.database_url)
     app.state.session_factory = make_session_factory(app.state.engine)
     app.state.redis = Redis.from_url(settings.redis_url, decode_responses=True)
+
+    app.state.health_task = None
+    if settings.health_check_enabled:
+        from .health_checker import health_check_loop
+        app.state.health_task = asyncio.create_task(
+            health_check_loop(app.state.session_factory)
+        )
     try:
         yield
     finally:
+        if app.state.health_task is not None:
+            app.state.health_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await app.state.health_task
         await app.state.redis.aclose()
         await app.state.engine.dispose()
 

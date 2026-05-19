@@ -27,6 +27,7 @@ class Action:
     SERVICE_CREATE       = "service.create"
     SERVICE_UPDATE       = "service.update"
     SERVICE_DELETE       = "service.delete"
+    SERVICE_HEALTH_CHANGE = "service.health_change"
 
 
 # Column names that must NEVER end up in audit before/after jsonb.

@@ -2,7 +2,14 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage } from 'element-plus';
-import { getService, updateService, type McpService } from '@/api/services';
+import {
+  getService,
+  getServiceHealthHistory,
+  updateService,
+  type HealthHistoryItem,
+  type HealthStatus,
+  type McpService,
+} from '@/api/services';
 import { listApplications, type Application } from '@/api/applications';
 import { listServicePermissions, type Permission } from '@/api/permissions';
 import {
@@ -131,6 +138,39 @@ async function loadStats() {
 
 watch([tab, service, statsRange], ([t, s, r]) => {
   if (t === 'stats' && s && loadedRange.value !== r) void loadStats();
+});
+
+// ---- 健康历史 tab（懒加载，与 stats 同款哨兵模式） ----
+const healthEvents = ref<HealthHistoryItem[]>([]);
+const healthLoading = ref(false);
+let healthLoadedFor: string | null = null;
+
+const HEALTH_LABEL: Record<HealthStatus, string> = {
+  healthy: '健康',
+  unhealthy: '异常',
+  unknown: '未知',
+};
+
+function healthLabel(s: HealthStatus | null | undefined): string {
+  if (!s) return '未知';
+  return HEALTH_LABEL[s] ?? s;
+}
+
+async function loadHealthHistory() {
+  if (!service.value) return;
+  const slug = service.value.slug;
+  healthLoadedFor = slug;
+  healthLoading.value = true;
+  try {
+    const resp = await getServiceHealthHistory(slug);
+    healthEvents.value = resp.items;
+  } finally {
+    healthLoading.value = false;
+  }
+}
+
+watch([tab, service], ([t, s]) => {
+  if (t === 'health' && s && healthLoadedFor !== s.slug) void loadHealthHistory();
 });
 
 function pctFormatter(v: string | number | null | undefined): string {
@@ -320,7 +360,30 @@ onMounted(load);
         </div>
       </el-tab-pane>
       <el-tab-pane label="健康历史" name="health">
-        <div class="text-secondary" style="padding: 16px;">健康检查历史（v1）。</div>
+        <div v-loading="healthLoading" class="health-history">
+          <el-table
+            :data="healthEvents"
+            empty-text="暂无状态变化记录"
+            style="width: 100%;"
+          >
+            <el-table-column label="发生时间" width="200">
+              <template #default="{ row }: { row: HealthHistoryItem }">
+                {{ formatDateTime(row.ts) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="状态变化">
+              <template #default="{ row }: { row: HealthHistoryItem }">
+                <span class="health-change">
+                  <HealthDot :status="row.from_status ?? 'unknown'" />
+                  <span class="health-change__label">{{ healthLabel(row.from_status) }}</span>
+                  <span class="health-change__arrow">→</span>
+                  <HealthDot :status="row.to_status ?? 'unknown'" />
+                  <span class="health-change__label">{{ healthLabel(row.to_status) }}</span>
+                </span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
       </el-tab-pane>
       <el-tab-pane label="版本（v1）" name="versions" disabled />
     </el-tabs>
@@ -403,6 +466,22 @@ onMounted(load);
   font-size: var(--text-sm);
   font-weight: var(--font-weight-semibold);
   color: var(--color-gray-700);
+}
+.health-history {
+  padding: var(--space-2) 0;
+}
+.health-change {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+.health-change__label {
+  color: var(--color-gray-700);
+}
+.health-change__arrow {
+  color: var(--color-gray-400);
+  margin: 0 var(--space-1);
 }
 @media (max-width: 960px) {
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }

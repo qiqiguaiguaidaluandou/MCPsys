@@ -59,3 +59,17 @@ export function updateService(slug: string, payload: UpdateServicePayload): Prom
 export function archiveService(slug: string): Promise<void> {
   return client.delete(`/api/v1/services/${slug}`).then(() => undefined);
 }
+
+export interface HealthHistoryItem {
+  ts: string;
+  from_status: HealthStatus | null;
+  to_status: HealthStatus | null;
+}
+
+export interface HealthHistoryResp {
+  items: HealthHistoryItem[];
+}
+
+export function getServiceHealthHistory(slug: string): Promise<HealthHistoryResp> {
+  return client.get(`/api/v1/services/${slug}/health-history`).then((r) => r.data);
+}

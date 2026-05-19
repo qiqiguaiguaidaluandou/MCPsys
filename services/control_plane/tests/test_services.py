@@ -301,6 +301,83 @@ async def test_audit_service_update(client, admin, existing_service, session_fac
     assert r.after["display_name"] == "Renamed"
 
 
+async def test_health_history_empty_when_no_events(client, admin):
+    await client.post(
+        "/api/v1/services",
+        headers=auth_header(admin),
+        json={"slug": "hh-svc", "display_name": "X", "endpoint_url": "http://x/mcp"},
+    )
+    resp = await client.get("/api/v1/services/hh-svc/health-history", headers=auth_header(admin))
+    assert resp.status_code == 200
+    assert resp.json() == {"items": []}
+
+
+async def test_health_history_returns_changes_desc(client, admin, session_factory):
+    create = await client.post(
+        "/api/v1/services",
+        headers=auth_header(admin),
+        json={"slug": "hh-c", "display_name": "C", "endpoint_url": "http://c/mcp"},
+    )
+    sid = create.json()["id"]
+    async with session_factory() as s:
+        s.add(AuditEvent(
+            actor_user_id=None,
+            action="service.health_change",
+            target_type="mcp_service",
+            target_id=str(sid),
+            before={"health_status": "unknown", "slug": "hh-c"},
+            after={"health_status": "healthy", "slug": "hh-c"},
+            ip=None,
+        ))
+        await s.commit()
+        s.add(AuditEvent(
+            actor_user_id=None,
+            action="service.health_change",
+            target_type="mcp_service",
+            target_id=str(sid),
+            before={"health_status": "healthy", "slug": "hh-c"},
+            after={"health_status": "unhealthy", "slug": "hh-c"},
+            ip=None,
+        ))
+        await s.commit()
+    resp = await client.get("/api/v1/services/hh-c/health-history", headers=auth_header(admin))
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert len(items) == 2
+    # DESC：最新（healthy→unhealthy）在前
+    assert items[0]["from_status"] == "healthy" and items[0]["to_status"] == "unhealthy"
+    assert items[1]["from_status"] == "unknown" and items[1]["to_status"] == "healthy"
+
+
+async def test_health_history_viewer_can_read(client, admin, session_factory):
+    """viewer 角色访问 /health-history 应 200（与服务详情可见性一致）。"""
+    async with session_factory() as s:
+        v = User(
+            username="hh-viewer",
+            password_hash=hash_password("p"),
+            role=UserRole.viewer,
+            status=UserStatus.active,
+        )
+        s.add(v)
+        await s.commit()
+        await s.refresh(v)
+        viewer = v
+    await client.post(
+        "/api/v1/services",
+        headers=auth_header(admin),
+        json={"slug": "hh-v", "display_name": "V", "endpoint_url": "http://v/mcp"},
+    )
+    resp = await client.get(
+        "/api/v1/services/hh-v/health-history", headers=auth_header(viewer)
+    )
+    assert resp.status_code == 200
+
+
+async def test_health_history_404_unknown_slug(client, admin):
+    resp = await client.get("/api/v1/services/does-not-exist/health-history", headers=auth_header(admin))
+    assert resp.status_code == 404
+
+
 async def test_audit_service_delete(client, admin, existing_service, session_factory):
     resp = await client.delete(
         f"/api/v1/services/{existing_service.slug}",
