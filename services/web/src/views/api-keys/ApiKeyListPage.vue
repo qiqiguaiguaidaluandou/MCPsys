@@ -111,11 +111,6 @@ onMounted(load);
   </PageHeader>
 
   <DataTable :data="items" :loading="loading">
-    <el-table-column label="Key" width="140">
-      <template #default="{ row }: { row: ApiKey }">
-        <span class="mono">{{ row.key_prefix }}...</span>
-      </template>
-    </el-table-column>
     <el-table-column label="名称" min-width="200">
       <template #default="{ row }: { row: ApiKey }">
         <router-link :to="`/api-keys/${row.id}`">{{ row.name }}</router-link>
@@ -128,6 +123,11 @@ onMounted(load);
           :to="`/applications/${row.owner_id}`"
         >{{ ownerLabel(row) }}</router-link>
         <span v-else class="text-secondary">{{ ownerLabel(row) }}</span>
+      </template>
+    </el-table-column>
+    <el-table-column label="Key" width="140">
+      <template #default="{ row }: { row: ApiKey }">
+        <span class="mono">{{ row.key_prefix }}...</span>
       </template>
     </el-table-column>
     <el-table-column label="QPS 限流" width="180">
@@ -163,9 +163,6 @@ onMounted(load);
           </div>
         </el-popover>
       </template>
-    </el-table-column>
-    <el-table-column label="最近使用" width="140">
-      <template #default="{ row }: { row: ApiKey }"><RelativeTime :value="row.last_used_at" /></template>
     </el-table-column>
     <el-table-column label="状态" width="100">
       <template #default="{ row }: { row: ApiKey }">
