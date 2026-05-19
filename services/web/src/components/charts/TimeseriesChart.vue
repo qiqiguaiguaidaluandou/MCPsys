@@ -39,7 +39,8 @@ function fmtY(v: number | string): string {
 function xAxisFormatter(value: number): string {
   const d = dayjs(value);
   if (props.range === '15m' || props.range === '1h') return d.format('HH:mm');
-  if (props.range === '7d') return d.format('MM-DD');
+  if (props.range === '7d' || props.range === '30d' || props.range === 'all')
+    return d.format('MM-DD');
   return d.format('MM-DD HH:mm');
 }
 

@@ -272,3 +272,42 @@ async def test_breakdown_invalid_metric_422(client, admin):
         headers=auth_header(admin),
     )
     assert resp.status_code == 422
+
+
+async def test_breakdown_30d_range(client, admin, session_factory):
+    """range=30d 走通 breakdown 端点（_RANGE_DELTA 新键），跨日数据按 count 正确排序。"""
+    now = datetime.now(UTC)
+    async with session_factory() as s:
+        for i in range(3):
+            svc = McpService(
+                slug=f"bd30-svc-{i}",
+                display_name=f"S{i}",
+                endpoint_url=f"http://s{i}/mcp",
+                transport=TransportType.streamable_http,
+                status=ServiceStatus.active,
+            )
+            s.add(svc)
+        await s.commit()
+        svcs = sorted(
+            (await s.execute(select(McpService).where(McpService.slug.like("bd30-%"))))
+            .scalars()
+            .all(),
+            key=lambda r: r.slug,
+        )
+        # 跨 25 天 + 5 天，确保 30d 窗口都能包到
+        for _ in range(10):
+            await _add_log(s, ts=now - timedelta(days=25), service_id=svcs[0].id)
+        for _ in range(5):
+            await _add_log(s, ts=now - timedelta(days=5), service_id=svcs[1].id)
+        for _ in range(2):
+            await _add_log(s, ts=now - timedelta(days=1), service_id=svcs[2].id)
+        await s.commit()
+
+    resp = await client.get(
+        "/api/v1/stats/breakdown?dim=service&range=30d&limit=10",
+        headers=auth_header(admin),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    counts = {r["label"]: r["count"] for r in data["rows"] if r["label"].startswith("bd30-")}
+    assert counts == {"bd30-svc-0": 10, "bd30-svc-1": 5, "bd30-svc-2": 2}

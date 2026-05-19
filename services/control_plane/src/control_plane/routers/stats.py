@@ -35,6 +35,10 @@ _RANGE_DELTA: dict[Range, timedelta] = {
     "1h": timedelta(hours=1),
     "24h": timedelta(hours=24),
     "7d": timedelta(days=7),
+    "30d": timedelta(days=30),
+    # "all"：等价"无下界"。call_logs 实际不会有 10 年前的行，足够宽即可；
+    # 不查 MIN(ts) 是为了避开多一次往返 + 缓存键复杂化（range=all 仍是固定缓存键）。
+    "all": timedelta(days=3650),
 }
 
 _DEFAULT_BUCKET: dict[Range, Bucket] = {
@@ -42,6 +46,8 @@ _DEFAULT_BUCKET: dict[Range, Bucket] = {
     "1h": "1m",
     "24h": "5m",
     "7d": "1h",
+    "30d": "1d",
+    "all": "1d",
 }
 
 # spec §3.2.4：固定 bucket 边界，前端不传。最后一桶 hi=None 表示溢出（>= 2000ms）。
@@ -73,6 +79,8 @@ def _floor_to_bucket(ts: datetime, bucket: Bucket) -> datetime:
         return ts.replace(minute=(ts.minute // 5) * 5, second=0, microsecond=0)
     if bucket == "1h":
         return ts.replace(minute=0, second=0, microsecond=0)
+    if bucket == "1d":
+        return ts.replace(hour=0, minute=0, second=0, microsecond=0)
     raise ValueError(bucket)
 
 
@@ -179,11 +187,13 @@ def _bucket_expr(bucket: Bucket) -> str:
         )
     if bucket == "1h":
         return "date_trunc('hour', ts) AS bucket_ts"
+    if bucket == "1d":
+        return "date_trunc('day', ts) AS bucket_ts"
     raise ValueError(bucket)
 
 
 def _bucket_step(bucket: Bucket) -> str:
-    return {"1m": "1 minute", "5m": "5 minutes", "1h": "1 hour"}[bucket]
+    return {"1m": "1 minute", "5m": "5 minutes", "1h": "1 hour", "1d": "1 day"}[bucket]
 
 
 def _metric_expr(metric: Metric) -> str:

@@ -11,6 +11,7 @@ import {
   getBreakdown,
   type BreakdownRow,
   type OverviewResp,
+  type Range,
   type TimeseriesResp,
 } from '@/api/stats';
 import { useAuthStore } from '@/stores/auth';
@@ -21,8 +22,9 @@ import RelativeTime from '@/components/common/RelativeTime.vue';
 import CopyButton from '@/components/common/CopyButton.vue';
 import Icon from '@/components/icons/Icon.vue';
 import KpiCard from '@/components/charts/KpiCard.vue';
-import Sparkline from '@/components/charts/Sparkline.vue';
+import TimeseriesChart from '@/components/charts/TimeseriesChart.vue';
 import BarChart from '@/components/charts/BarChart.vue';
+import RangePicker from '@/components/charts/RangePicker.vue';
 import { formatDateTime } from '@/utils/format';
 
 const route = useRoute();
@@ -94,38 +96,41 @@ async function load() {
   }
 }
 
-// ---- 24h 概况（"调用统计" tab） ----
+// ---- 调用统计 tab（默认 24h，支持切 7d/30d/all） ----
+const statsRange = ref<Range>('24h');
 const overview = ref<OverviewResp | null>(null);
 const overviewLoading = ref(false);
 const sparkline = ref<TimeseriesResp | null>(null);
 const sparkLoading = ref(false);
 const topApps = ref<BreakdownRow[]>([]);
 const topAppsLoading = ref(false);
-let statsLoaded = false;
+// 记录最近一次加载使用的 range；切换 tab / range 与之不同才重新拉，避免抖动。
+const loadedRange = ref<Range | null>(null);
 
 async function loadStats() {
   if (!service.value) return;
   const sid = service.value.id;
-  statsLoaded = true;
+  const r = statsRange.value;
+  loadedRange.value = r;
   const filter = { service_id: sid };
   overviewLoading.value = true;
   sparkLoading.value = true;
   topAppsLoading.value = true;
   await Promise.all([
-    getOverview({ range: '24h', ...filter })
-      .then((r) => (overview.value = r))
+    getOverview({ range: r, ...filter })
+      .then((res) => (overview.value = res))
       .finally(() => (overviewLoading.value = false)),
-    getTimeseries({ metric: 'calls', range: '24h', bucket: '1h', ...filter })
-      .then((r) => (sparkline.value = r))
+    getTimeseries({ metric: 'calls', range: r, ...filter })
+      .then((res) => (sparkline.value = res))
       .finally(() => (sparkLoading.value = false)),
-    getBreakdown({ dim: 'application', range: '24h', limit: 5, ...filter })
-      .then((r) => (topApps.value = r.rows))
+    getBreakdown({ dim: 'application', range: r, limit: 5, ...filter })
+      .then((res) => (topApps.value = res.rows))
       .finally(() => (topAppsLoading.value = false)),
   ]);
 }
 
-watch([tab, service], ([t, s]) => {
-  if (t === 'stats' && s && !statsLoaded) void loadStats();
+watch([tab, service, statsRange], ([t, s, r]) => {
+  if (t === 'stats' && s && loadedRange.value !== r) void loadStats();
 });
 
 function pctFormatter(v: string | number | null | undefined): string {
@@ -253,20 +258,22 @@ onMounted(load);
       </el-tab-pane>
       <el-tab-pane label="调用统计" name="stats">
         <div class="stats-block">
-          <div class="stats-block__hint">
-            统计窗口固定 24h；完整视图见
-            <router-link to="/dashboard">仪表盘</router-link>。
+          <div class="stats-toolbar">
+            <RangePicker v-model:range="statsRange" />
+            <span class="stats-block__hint">
+              完整视图见 <router-link to="/dashboard">仪表盘</router-link>。
+            </span>
           </div>
           <div class="kpi-grid">
             <KpiCard
-              label="24h 调用次数"
+              label="调用次数"
               icon="activity"
               tone="primary"
               :value="overview?.calls ?? null"
               :loading="overviewLoading"
             />
             <KpiCard
-              label="24h 错误率"
+              label="错误率"
               icon="alert-triangle"
               tone="error"
               :value="overview?.error_rate ?? null"
@@ -274,7 +281,7 @@ onMounted(load);
               :formatter="pctFormatter"
             />
             <KpiCard
-              label="24h P95 延迟"
+              label="P95 延迟"
               icon="trending-up"
               tone="warning"
               :value="overview?.p95_ms ?? null"
@@ -284,10 +291,14 @@ onMounted(load);
           </div>
           <div class="stats-row">
             <div class="stats-row__col">
-              <h4 class="stats-row__title">24h 调用趋势</h4>
-              <div v-loading="sparkLoading" class="spark-wrap">
-                <Sparkline :points="sparkline?.points ?? []" :height="64" />
-              </div>
+              <h4 class="stats-row__title">调用趋势</h4>
+              <TimeseriesChart
+                :points="sparkline?.points ?? []"
+                metric="calls"
+                :range="statsRange"
+                :loading="sparkLoading"
+                :height="240"
+              />
             </div>
             <div class="stats-row__col">
               <h4 class="stats-row__title">Top 5 调用方应用</h4>
@@ -359,10 +370,15 @@ onMounted(load);
 .stats-block {
   padding: var(--space-2) 0 var(--space-4);
 }
+.stats-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
 .stats-block__hint {
   font-size: var(--text-xs);
   color: var(--color-gray-500);
-  margin-bottom: var(--space-3);
 }
 .kpi-grid {
   display: grid;
@@ -380,13 +396,6 @@ onMounted(load);
   font-size: var(--text-sm);
   font-weight: var(--font-weight-semibold);
   color: var(--color-gray-700);
-}
-.spark-wrap {
-  background: var(--color-surface);
-  border: 1px solid var(--color-gray-200);
-  border-radius: var(--radius-base);
-  padding: var(--space-3);
-  min-height: 80px;
 }
 @media (max-width: 960px) {
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }

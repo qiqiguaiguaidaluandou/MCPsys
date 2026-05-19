@@ -7,9 +7,9 @@
  */
 import { client } from './client';
 
-export type Range = '15m' | '1h' | '24h' | '7d';
+export type Range = '15m' | '1h' | '24h' | '7d' | '30d' | 'all';
 export type Metric = 'calls' | 'errors' | 'error_rate' | 'p50' | 'p95' | 'p99' | 'throttled';
-export type Bucket = '1m' | '5m' | '1h';
+export type Bucket = '1m' | '5m' | '1h' | '1d';
 export type Dim = 'service' | 'application' | 'api_key' | 'tool' | 'status';
 
 /** 互斥过滤；与后端 pick_filter 优先级一致：service_id > application_id > api_key_id。 */
@@ -134,6 +134,8 @@ export const RANGE_OPTIONS: { value: Range; label: string }[] = [
   { value: '1h', label: '1 小时' },
   { value: '24h', label: '24 小时' },
   { value: '7d', label: '7 天' },
+  { value: '30d', label: '30 天' },
+  { value: 'all', label: '全部' },
 ];
 
 export const METRIC_LABELS: Record<Metric, string> = {

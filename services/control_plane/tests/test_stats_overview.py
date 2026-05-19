@@ -200,3 +200,20 @@ async def test_overview_unauthenticated_rejected(client):
 async def test_overview_invalid_range_422(client, admin):
     resp = await client.get("/api/v1/stats/overview?range=foo", headers=auth_header(admin))
     assert resp.status_code == 422
+
+
+async def test_overview_30d_and_all_ranges(client, admin, session_factory):
+    """range=30d / all 走通；窗口边界与新 _RANGE_DELTA 一致。"""
+    now = datetime.now(UTC)
+    async with session_factory() as s:
+        await _add_log(s, ts=now - timedelta(hours=3))    # 24h 命中
+        await _add_log(s, ts=now - timedelta(days=3))     # 7d / 30d / all 命中
+        await _add_log(s, ts=now - timedelta(days=40))    # 仅 all 命中
+        await s.commit()
+
+    for range_, expected in [("24h", 1), ("7d", 2), ("30d", 2), ("all", 3)]:
+        resp = await client.get(
+            f"/api/v1/stats/overview?range={range_}", headers=auth_header(admin)
+        )
+        assert resp.status_code == 200, range_
+        assert resp.json()["calls"] == expected, range_

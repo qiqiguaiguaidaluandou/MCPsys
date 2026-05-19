@@ -3,9 +3,9 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-Range = Literal["15m", "1h", "24h", "7d"]
+Range = Literal["15m", "1h", "24h", "7d", "30d", "all"]
 Metric = Literal["calls", "errors", "error_rate", "p50", "p95", "p99", "throttled"]
-Bucket = Literal["1m", "5m", "1h"]
+Bucket = Literal["1m", "5m", "1h", "1d"]
 Dim = Literal["service", "application", "api_key", "tool", "status"]
 
 

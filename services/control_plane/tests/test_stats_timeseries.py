@@ -118,7 +118,14 @@ async def test_timeseries_calls_bucket_5m(client, admin, session_factory):
 
 
 async def test_timeseries_default_bucket_by_range(client, admin):
-    for r, expected_bucket in [("15m", "1m"), ("1h", "1m"), ("24h", "5m"), ("7d", "1h")]:
+    for r, expected_bucket in [
+        ("15m", "1m"),
+        ("1h", "1m"),
+        ("24h", "5m"),
+        ("7d", "1h"),
+        ("30d", "1d"),
+        ("all", "1d"),
+    ]:
         resp = await client.get(
             f"/api/v1/stats/timeseries?metric=calls&range={r}",
             headers=auth_header(admin),
@@ -156,3 +163,42 @@ async def test_timeseries_error_rate_no_data_zero(client, admin):
     )
     assert resp.status_code == 200
     assert all(p["value"] == 0 for p in resp.json()["points"])
+
+
+async def test_timeseries_30d_default_bucket_1d(client, admin, session_factory):
+    """range=30d 默认 bucket=1d，30 个桶；唯一落点位于 now-5d 桶。"""
+    now = datetime.now(UTC)
+    async with session_factory() as s:
+        await _add_log(s, ts=now - timedelta(days=5))
+        await s.commit()
+
+    resp = await client.get(
+        "/api/v1/stats/timeseries?metric=calls&range=30d",
+        headers=auth_header(admin),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["bucket"] == "1d"
+    assert len(data["points"]) == 30
+    nonzero = [p for p in data["points"] if p["value"]]
+    assert len(nonzero) == 1
+    assert nonzero[0]["value"] == 1
+
+
+async def test_timeseries_all_1d_bucket_old_log(client, admin, session_factory):
+    """range=all 用 1d bucket 也能包到 100 天前的旧 call_log。"""
+    now = datetime.now(UTC)
+    async with session_factory() as s:
+        await _add_log(s, ts=now - timedelta(days=100))
+        await s.commit()
+
+    resp = await client.get(
+        "/api/v1/stats/timeseries?metric=calls&range=all",
+        headers=auth_header(admin),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["bucket"] == "1d"
+    nonzero = [p for p in data["points"] if p["value"]]
+    assert len(nonzero) == 1
+    assert nonzero[0]["value"] == 1

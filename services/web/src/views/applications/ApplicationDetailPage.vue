@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import {
@@ -14,6 +14,7 @@ import {
   getBreakdown,
   type BreakdownRow,
   type OverviewResp,
+  type Range,
   type TimeseriesResp,
 } from '@/api/stats';
 import { useAuthStore } from '@/stores/auth';
@@ -21,8 +22,9 @@ import PageHeader from '@/components/common/PageHeader.vue';
 import RelativeTime from '@/components/common/RelativeTime.vue';
 import Icon from '@/components/icons/Icon.vue';
 import KpiCard from '@/components/charts/KpiCard.vue';
-import Sparkline from '@/components/charts/Sparkline.vue';
+import TimeseriesChart from '@/components/charts/TimeseriesChart.vue';
 import BarChart from '@/components/charts/BarChart.vue';
+import RangePicker from '@/components/charts/RangePicker.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -63,13 +65,13 @@ async function load() {
     app.value = appData;
     services.value = svcList.items;
     draft.value = [...appData.service_ids];
-    void loadStats();
   } finally {
     loading.value = false;
   }
 }
 
-// ---- 24h 概况 ----
+// ---- 调用概况（支持 24h / 7d / 30d / all） ----
+const statsRange = ref<Range>('24h');
 const overview = ref<OverviewResp | null>(null);
 const overviewLoading = ref(false);
 const sparkline = ref<TimeseriesResp | null>(null);
@@ -79,22 +81,28 @@ const topServicesLoading = ref(false);
 
 async function loadStats() {
   if (!app.value) return;
+  const r = statsRange.value;
   const filter = { application_id: app.value.id };
   overviewLoading.value = true;
   sparkLoading.value = true;
   topServicesLoading.value = true;
   await Promise.all([
-    getOverview({ range: '24h', ...filter })
-      .then((r) => (overview.value = r))
+    getOverview({ range: r, ...filter })
+      .then((res) => (overview.value = res))
       .finally(() => (overviewLoading.value = false)),
-    getTimeseries({ metric: 'calls', range: '24h', bucket: '1h', ...filter })
-      .then((r) => (sparkline.value = r))
+    getTimeseries({ metric: 'calls', range: r, ...filter })
+      .then((res) => (sparkline.value = res))
       .finally(() => (sparkLoading.value = false)),
-    getBreakdown({ dim: 'service', range: '24h', limit: 5, ...filter })
-      .then((r) => (topServices.value = r.rows))
+    getBreakdown({ dim: 'service', range: r, limit: 5, ...filter })
+      .then((res) => (topServices.value = res.rows))
       .finally(() => (topServicesLoading.value = false)),
   ]);
 }
+
+// 应用对象就绪 / range 切换 都触发一次加载。
+watch([app, statsRange], ([a]) => {
+  if (a) void loadStats();
+});
 
 function pctFormatter(v: string | number | null | undefined): string {
   if (v == null) return '—';
@@ -173,19 +181,20 @@ onMounted(load);
 
     <section class="stats-block">
       <div class="stats-block__header">
-        <h3 class="stats-block__title">24h 概况</h3>
+        <h3 class="stats-block__title">调用概况</h3>
+        <RangePicker v-model:range="statsRange" />
         <span class="stats-block__hint">完整视图见<router-link to="/dashboard">仪表盘</router-link></span>
       </div>
       <div class="kpi-grid">
         <KpiCard
-          label="24h 调用次数"
+          label="调用次数"
           icon="activity"
           tone="primary"
           :value="overview?.calls ?? null"
           :loading="overviewLoading"
         />
         <KpiCard
-          label="24h 错误率"
+          label="错误率"
           icon="alert-triangle"
           tone="error"
           :value="overview?.error_rate ?? null"
@@ -193,7 +202,7 @@ onMounted(load);
           :formatter="pctFormatter"
         />
         <KpiCard
-          label="24h 被限流次数"
+          label="被限流次数"
           icon="zap-off"
           tone="info"
           :value="overview?.throttled ?? null"
@@ -202,10 +211,14 @@ onMounted(load);
       </div>
       <div class="stats-row">
         <div class="stats-row__col">
-          <h4 class="stats-row__title">24h 调用趋势</h4>
-          <div v-loading="sparkLoading" class="spark-wrap">
-            <Sparkline :points="sparkline?.points ?? []" :height="64" />
-          </div>
+          <h4 class="stats-row__title">调用趋势</h4>
+          <TimeseriesChart
+            :points="sparkline?.points ?? []"
+            metric="calls"
+            :range="statsRange"
+            :loading="sparkLoading"
+            :height="240"
+          />
         </div>
         <div class="stats-row__col">
           <h4 class="stats-row__title">Top 5 被调服务</h4>
@@ -361,13 +374,6 @@ onMounted(load);
   font-size: var(--text-sm);
   font-weight: var(--font-weight-semibold);
   color: var(--color-gray-700);
-}
-.spark-wrap {
-  background: var(--color-surface);
-  border: 1px solid var(--color-gray-200);
-  border-radius: var(--radius-base);
-  padding: var(--space-3);
-  min-height: 80px;
 }
 @media (max-width: 960px) {
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }

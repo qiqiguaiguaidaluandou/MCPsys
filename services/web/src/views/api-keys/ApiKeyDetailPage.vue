@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getApiKey, type ApiKey } from '@/api/api-keys';
 import { listApplications, type Application } from '@/api/applications';
@@ -7,13 +7,15 @@ import {
   getOverview,
   getTimeseries,
   type OverviewResp,
+  type Range,
   type TimeseriesResp,
 } from '@/api/stats';
 import PageHeader from '@/components/common/PageHeader.vue';
 import StatusTag from '@/components/common/StatusTag.vue';
 import Icon from '@/components/icons/Icon.vue';
 import KpiCard from '@/components/charts/KpiCard.vue';
-import Sparkline from '@/components/charts/Sparkline.vue';
+import TimeseriesChart from '@/components/charts/TimeseriesChart.vue';
+import RangePicker from '@/components/charts/RangePicker.vue';
 import { formatDateTime, formatRelative } from '@/utils/format';
 
 const route = useRoute();
@@ -23,6 +25,7 @@ const key = ref<ApiKey | null>(null);
 const apps = ref<Application[]>([]);
 const loading = ref(false);
 
+const statsRange = ref<Range>('24h');
 const overview = ref<OverviewResp | null>(null);
 const overviewLoading = ref(false);
 const callsSeries = ref<TimeseriesResp | null>(null);
@@ -46,19 +49,20 @@ function formatQps(qps: number | null | undefined): string {
 }
 
 async function loadStats(id: number) {
+  const r = statsRange.value;
   const filter = { api_key_id: id };
   overviewLoading.value = true;
   callsLoading.value = true;
   throttledLoading.value = true;
   await Promise.all([
-    getOverview({ range: '24h', ...filter })
-      .then((r) => (overview.value = r))
+    getOverview({ range: r, ...filter })
+      .then((res) => (overview.value = res))
       .finally(() => (overviewLoading.value = false)),
-    getTimeseries({ metric: 'calls', range: '24h', bucket: '1h', ...filter })
-      .then((r) => (callsSeries.value = r))
+    getTimeseries({ metric: 'calls', range: r, ...filter })
+      .then((res) => (callsSeries.value = res))
       .finally(() => (callsLoading.value = false)),
-    getTimeseries({ metric: 'throttled', range: '24h', bucket: '1h', ...filter })
-      .then((r) => (throttledSeries.value = r))
+    getTimeseries({ metric: 'throttled', range: r, ...filter })
+      .then((res) => (throttledSeries.value = res))
       .finally(() => (throttledLoading.value = false)),
   ]);
 }
@@ -70,11 +74,15 @@ async function load() {
     const [k, appList] = await Promise.all([getApiKey(id), listApplications()]);
     key.value = k;
     apps.value = appList.items;
-    void loadStats(k.id);
   } finally {
     loading.value = false;
   }
 }
+
+// key 就绪 / range 切换 都触发一次加载（首次 load 完 + 之后切 range 都靠这里）。
+watch([key, statsRange], ([k]) => {
+  if (k) void loadStats(k.id);
+});
 
 onMounted(load);
 </script>
@@ -126,7 +134,8 @@ onMounted(load);
 
     <section class="stats-block">
       <div class="stats-block__header">
-        <h3 class="stats-block__title">24h 概况</h3>
+        <h3 class="stats-block__title">调用概况</h3>
+        <RangePicker v-model:range="statsRange" />
         <span class="stats-block__hint">
           所属应用的整体视图见
           <router-link
@@ -137,14 +146,14 @@ onMounted(load);
       </div>
       <div class="kpi-grid">
         <KpiCard
-          label="24h 调用次数"
+          label="调用次数"
           icon="activity"
           tone="primary"
           :value="overview?.calls ?? null"
           :loading="overviewLoading"
         />
         <KpiCard
-          label="24h 被限流次数"
+          label="被限流次数"
           icon="zap-off"
           tone="info"
           :value="overview?.throttled ?? null"
@@ -161,20 +170,24 @@ onMounted(load);
       </div>
       <div class="stats-row">
         <div class="stats-row__col">
-          <h4 class="stats-row__title">24h 调用趋势</h4>
-          <div v-loading="callsLoading" class="spark-wrap">
-            <Sparkline :points="callsSeries?.points ?? []" :height="64" />
-          </div>
+          <h4 class="stats-row__title">调用趋势</h4>
+          <TimeseriesChart
+            :points="callsSeries?.points ?? []"
+            metric="calls"
+            :range="statsRange"
+            :loading="callsLoading"
+            :height="240"
+          />
         </div>
         <div class="stats-row__col">
-          <h4 class="stats-row__title">24h 被限流趋势</h4>
-          <div v-loading="throttledLoading" class="spark-wrap">
-            <Sparkline
-              :points="throttledSeries?.points ?? []"
-              :height="64"
-              color="var(--color-warning)"
-            />
-          </div>
+          <h4 class="stats-row__title">被限流趋势</h4>
+          <TimeseriesChart
+            :points="throttledSeries?.points ?? []"
+            metric="throttled"
+            :range="statsRange"
+            :loading="throttledLoading"
+            :height="240"
+          />
         </div>
       </div>
     </section>
@@ -238,13 +251,6 @@ onMounted(load);
   font-size: var(--text-sm);
   font-weight: var(--font-weight-semibold);
   color: var(--color-gray-700);
-}
-.spark-wrap {
-  background: var(--color-surface);
-  border: 1px solid var(--color-gray-200);
-  border-radius: var(--radius-base);
-  padding: var(--space-3);
-  min-height: 80px;
 }
 @media (max-width: 960px) {
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
