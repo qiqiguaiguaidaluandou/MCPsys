@@ -20,8 +20,8 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/',
-    // 保持默认登录后落地 /services；仪表盘作为可单独导航的页面，路径 /dashboard。
-    redirect: { name: 'ServiceList' },
+    // 默认登录后落地 /dashboard（仪表盘）；服务目录通过侧边栏导航进入。
+    redirect: { name: 'Dashboard' },
   },
   {
     path: '/dashboard',
