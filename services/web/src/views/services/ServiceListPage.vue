@@ -9,6 +9,7 @@ import HealthDot from '@/components/feature/HealthDot.vue';
 import DataTable from '@/components/common/DataTable.vue';
 import RelativeTime from '@/components/common/RelativeTime.vue';
 import Icon from '@/components/icons/Icon.vue';
+import { gatewayUrl } from '@/utils/format';
 import { ElMessage } from 'element-plus';
 
 const router = useRouter();
@@ -183,7 +184,11 @@ onMounted(load);
         <StatusTag :status="row.status" />
       </template>
     </el-table-column>
-    <el-table-column prop="endpoint_url" label="端点" min-width="240" show-overflow-tooltip />
+    <el-table-column label="调用路径" min-width="280" show-overflow-tooltip>
+      <template #default="{ row }: { row: McpService }">
+        <span class="mono">{{ gatewayUrl(row.slug) }}</span>
+      </template>
+    </el-table-column>
     <el-table-column label="最近检查" width="140">
       <template #default="{ row }: { row: McpService }">
         <RelativeTime :value="row.last_health_check_at" />

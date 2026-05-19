@@ -77,6 +77,23 @@ async def test_get_service_by_slug(client, admin):
     assert resp.json()["slug"] == "crm"
 
 
+async def test_get_service_includes_timestamps(client, admin):
+    """ServiceOut 必须下发 created_at / updated_at / last_health_check_at；
+    历史 schema 漏字段导致前端「注册时间」一直显示 -。"""
+    await client.post(
+        "/api/v1/services",
+        headers=auth_header(admin),
+        json={"slug": "ts-svc", "display_name": "TS", "endpoint_url": "http://ts/mcp"},
+    )
+    resp = await client.get("/api/v1/services/ts-svc", headers=auth_header(admin))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert isinstance(body.get("created_at"), str) and body["created_at"]
+    assert isinstance(body.get("updated_at"), str) and body["updated_at"]
+    # 健康检查 worker 尚未跑过该服务，应为 None
+    assert body.get("last_health_check_at") is None
+
+
 async def test_update_service_endpoint(client, admin):
     await client.post(
         "/api/v1/services",

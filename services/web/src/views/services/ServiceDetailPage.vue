@@ -25,7 +25,7 @@ import KpiCard from '@/components/charts/KpiCard.vue';
 import TimeseriesChart from '@/components/charts/TimeseriesChart.vue';
 import BarChart from '@/components/charts/BarChart.vue';
 import RangePicker from '@/components/charts/RangePicker.vue';
-import { formatDateTime } from '@/utils/format';
+import { formatDateTime, gatewayUrl } from '@/utils/format';
 
 const route = useRoute();
 const router = useRouter();
@@ -167,6 +167,13 @@ onMounted(load);
     <el-tabs v-model="tab">
       <el-tab-pane label="概览" name="overview">
         <div class="overview">
+          <div class="overview__row">
+            <div class="overview__label">调用路径</div>
+            <div class="overview__value mono">
+              {{ gatewayUrl(service.slug) }}
+              <CopyButton :text="gatewayUrl(service.slug)" />
+            </div>
+          </div>
           <div class="overview__row">
             <div class="overview__label">端点 URL</div>
             <div class="overview__value mono">

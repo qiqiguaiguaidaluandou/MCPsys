@@ -27,3 +27,10 @@ export function formatRelative(iso: string | Date | null | undefined): string {
   if (!iso) return '-';
   return dayjs(iso).fromNow();
 }
+
+// 网关入口路径硬规约 `POST /mcp/{slug}`（gateway routers/mcp.py + nginx /mcp/ location）。
+// 用 window.location.origin 拼出客户端要打的完整 URL；SSR fallback 不会真用到，留个底防 prerender。
+export function gatewayUrl(slug: string): string {
+  if (typeof window === 'undefined') return `/mcp/${slug}`;
+  return `${window.location.origin}/mcp/${slug}`;
+}

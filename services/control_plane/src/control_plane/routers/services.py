@@ -1,4 +1,5 @@
 import re
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from mcpsys_shared.models import (
@@ -66,6 +67,9 @@ class ServiceOut(BaseModel):
     status: ServiceStatus
     health_status: HealthStatus
     rate_limit_qps: int | None
+    last_health_check_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
 
 
 class ServiceList(BaseModel):
