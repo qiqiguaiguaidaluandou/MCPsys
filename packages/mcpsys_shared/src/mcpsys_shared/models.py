@@ -113,7 +113,6 @@ class ApiKey(Base):
         JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
     )
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

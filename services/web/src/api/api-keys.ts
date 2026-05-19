@@ -12,7 +12,6 @@ export interface ApiKey {
   scopes: Record<string, unknown> | null;
   rate_limit_qps: number | null;
   expires_at: string | null;
-  last_used_at: string | null;
   revoked_at: string | null;
   created_at: string;
 }

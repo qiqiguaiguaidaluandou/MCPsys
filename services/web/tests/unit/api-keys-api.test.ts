@@ -23,7 +23,6 @@ describe('getApiKey', () => {
       scopes: null,
       rate_limit_qps: null,
       expires_at: null,
-      last_used_at: null,
       revoked_at: null,
       created_at: '2026-05-18T00:00:00Z',
     });

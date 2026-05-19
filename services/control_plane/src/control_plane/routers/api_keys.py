@@ -36,7 +36,6 @@ class ApiKeyOut(BaseModel):
     owner_type: ApiKeyOwnerType
     owner_id: int
     expires_at: datetime | None
-    last_used_at: datetime | None
     revoked_at: datetime | None
     created_at: datetime
     rate_limit_qps: int | None
