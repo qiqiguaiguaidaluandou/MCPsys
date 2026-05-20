@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import {
   getService,
   getServiceHealthHistory,
@@ -48,6 +48,9 @@ const apps = ref<Application[]>([]);
 const qpsDraft = ref<number | null>(null);
 const qpsSaving = ref(false);
 
+const endpointDraft = ref('');
+const endpointSaving = ref(false);
+
 const canEdit = computed(() => auth.hasRole('admin', 'operator'));
 
 function formatQps(qps: number | null | undefined): string {
@@ -70,6 +73,33 @@ async function onSaveQps() {
 
 function clearQpsDraft() {
   qpsDraft.value = null;
+}
+
+async function onSaveEndpoint() {
+  if (!service.value) return;
+  const next = endpointDraft.value.trim();
+  if (!next || next === service.value.endpoint_url) return;
+  if (!/^https?:\/\//i.test(next)) {
+    ElMessage.warning('请输入以 http:// 或 https:// 开头的 URL');
+    return;
+  }
+  try {
+    await ElMessageBox.confirm(
+      `保存后网关会立即把「${service.value.slug}」的流量切到新地址；若地址不可用，该服务调用会立即失败。确认修改？`,
+      '修改端点 URL',
+      { type: 'warning', confirmButtonText: '确认修改', cancelButtonText: '取消' },
+    );
+  } catch {
+    return; // 用户取消
+  }
+  endpointSaving.value = true;
+  try {
+    await updateService(service.value.slug, { endpoint_url: next });
+    ElMessage.success('端点 URL 已更新');
+    await load();
+  } finally {
+    endpointSaving.value = false;
+  }
 }
 
 function appNameById(id: number): string {
@@ -97,6 +127,7 @@ async function load() {
   try {
     service.value = await getService(String(route.params.slug));
     qpsDraft.value = service.value.rate_limit_qps;
+    endpointDraft.value = service.value.endpoint_url;
     await Promise.all([reloadPermissions(), reloadApps()]);
   } finally {
     loading.value = false;
@@ -217,8 +248,34 @@ onMounted(load);
           <div class="overview__row">
             <div class="overview__label">端点 URL</div>
             <div class="overview__value mono">
-              {{ service.endpoint_url }}
-              <CopyButton :text="service.endpoint_url" />
+              <template v-if="canEdit">
+                <div class="endpoint-edit">
+                  <el-input
+                    v-model="endpointDraft"
+                    placeholder="https://host/mcp"
+                    class="endpoint-edit__input"
+                    @keyup.enter="onSaveEndpoint"
+                  />
+                  <el-button
+                    type="primary"
+                    size="small"
+                    :loading="endpointSaving"
+                    :disabled="!endpointDraft || endpointDraft === service.endpoint_url"
+                    @click="onSaveEndpoint"
+                  >保存</el-button>
+                  <el-button
+                    link
+                    size="small"
+                    :disabled="endpointDraft === service.endpoint_url"
+                    @click="endpointDraft = service.endpoint_url"
+                  >重置</el-button>
+                  <CopyButton :text="service.endpoint_url" />
+                </div>
+              </template>
+              <template v-else>
+                {{ service.endpoint_url }}
+                <CopyButton :text="service.endpoint_url" />
+              </template>
             </div>
           </div>
           <div class="overview__row">
@@ -435,6 +492,14 @@ onMounted(load);
   margin-left: var(--space-2);
   color: var(--color-gray-500);
   font-size: var(--text-xs);
+}
+.endpoint-edit {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.endpoint-edit__input {
+  max-width: 460px;
 }
 .stats-block {
   padding: var(--space-2) 0 var(--space-4);
