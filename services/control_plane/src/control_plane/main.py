@@ -48,13 +48,21 @@ async def lifespan(app: FastAPI):
         app.state.health_task = asyncio.create_task(
             health_check_loop(app.state.session_factory)
         )
+
+    app.state.retention_task = None
+    if settings.retention_enabled:
+        from .retention import retention_loop
+        app.state.retention_task = asyncio.create_task(
+            retention_loop(app.state.session_factory)
+        )
     try:
         yield
     finally:
-        if app.state.health_task is not None:
-            app.state.health_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await app.state.health_task
+        for task in (app.state.health_task, app.state.retention_task):
+            if task is not None:
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
         await app.state.redis.aclose()
         await app.state.engine.dispose()
 

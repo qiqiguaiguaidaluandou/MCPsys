@@ -170,7 +170,11 @@ class McpServiceVersion(Base):
 
 
 class CallLog(Base):
-    """Per-request log written by the gateway. Body fields are nulled after 30 days.
+    """Per-request log written by the gateway.
+
+    Retention (spec §7): metadata is kept forever; request_body / response_body are
+    nulled after `call_log_body_retention_days` (default 30) by the control-plane
+    retention worker (control_plane.retention). Rows are never deleted.
 
     No FKs on caller/service columns: this is a high-volume append-only log that must
     survive deletion of the referenced entities and avoid cascade-on-write cost.
@@ -182,6 +186,14 @@ class CallLog(Base):
         Index("ix_call_logs_service_ts", "service_id", "ts"),
         Index("ix_call_logs_apikey_ts", "api_key_id", "ts"),
         Index("ix_call_logs_status_ts", "status", "ts"),
+        # Partial index over rows whose bodies are not yet nulled. The retention
+        # worker scans `ts < cutoff AND body IS NOT NULL`; this keeps that scan
+        # proportional to the un-purged backlog rather than the whole table.
+        Index(
+            "ix_call_logs_body_unpurged",
+            "ts",
+            postgresql_where=text("request_body IS NOT NULL OR response_body IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
