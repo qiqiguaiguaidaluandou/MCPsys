@@ -11,7 +11,6 @@ export interface CallLog {
   user_id: number | null;
   service_id: number;
   service_slug?: string;
-  service_version: string | null;
   tool_name: string | null;
   request_id: string | null;
   status: CallStatus;

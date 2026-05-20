@@ -50,7 +50,6 @@ export default {
     permissions: '权限管理',
     config: '配置中心',
     audit: '审计事件',
-    versions: '服务版本',
     profile: '个人资料',
   },
   error: {

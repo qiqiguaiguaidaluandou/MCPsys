@@ -36,7 +36,6 @@ class CallLogList(BaseModel):
 
 
 class CallLogDetail(CallLogOut):
-    service_version: str | None
     request_id: str | None
     error_message: str | None
     request_body: str | None

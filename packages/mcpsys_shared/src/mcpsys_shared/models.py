@@ -4,7 +4,6 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
-    Boolean,
     DateTime,
     Enum,
     ForeignKey,
@@ -151,24 +150,6 @@ class McpService(Base):
     rate_limit_qps: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
-class McpServiceVersion(Base):
-    __tablename__ = "mcp_service_versions"
-    __table_args__ = (UniqueConstraint("service_id", "version"),)
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    service_id: Mapped[int] = mapped_column(ForeignKey("mcp_services.id"), nullable=False)
-    version: Mapped[str] = mapped_column(String(32), nullable=False)
-    endpoint_url: Mapped[str] = mapped_column(String(512), nullable=False)
-    manifest: Mapped[dict] = mapped_column(
-        JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb")
-    )
-    is_current: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
-
-
 class CallLog(Base):
     """Per-request log written by the gateway.
 
@@ -204,7 +185,6 @@ class CallLog(Base):
     application_id: Mapped[int | None] = mapped_column(Integer)
     user_id: Mapped[int | None] = mapped_column(Integer)
     service_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    service_version: Mapped[str | None] = mapped_column(String(32))
     tool_name: Mapped[str | None] = mapped_column(String(128))
     request_id: Mapped[str | None] = mapped_column(String(128))
     status: Mapped[CallStatus] = mapped_column(Enum(CallStatus), nullable=False)

@@ -201,7 +201,6 @@ async def call_log_with_body(session_factory):
         row = CallLog(
             ts=datetime.now(UTC),
             service_id=svc.id,
-            service_version="1.0",
             tool_name="echo",
             request_id="req-abc",
             status=CallStatus.success,
@@ -253,7 +252,6 @@ async def test_get_call_log_as_admin(client, admin, call_log_with_body):
     assert body["id"] == str(call_log_with_body.id)
     assert body["request_body"] == '{"x":1}'
     assert body["response_body"] == '{"ok":true}'
-    assert body["service_version"] == "1.0"
     assert body["request_id"] == "req-abc"
     assert body["client_ip"] == "10.0.0.5"
     assert body["tool_name"] == "echo"

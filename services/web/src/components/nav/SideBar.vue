@@ -51,7 +51,6 @@ const menu = computed<MenuItem[]>(() => [
     children: [
       { key: 'permissions', icon: 'shield', labelKey: 'nav.permissions', disabled: true },
       { key: 'config',      icon: 'sliders', labelKey: 'nav.config',      disabled: true },
-      { key: 'versions',    icon: 'git-branch', labelKey: 'nav.versions',  disabled: true },
     ],
   },
 ]);

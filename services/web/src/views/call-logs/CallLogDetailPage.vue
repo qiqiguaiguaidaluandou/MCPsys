@@ -54,7 +54,6 @@ onMounted(load);
         <el-descriptions-item label="耗时">{{ formatDuration(log.duration_ms) }}</el-descriptions-item>
         <el-descriptions-item label="HTTP">{{ log.http_status ?? '—' }}</el-descriptions-item>
         <el-descriptions-item label="服务 ID">{{ log.service_id }}</el-descriptions-item>
-        <el-descriptions-item label="服务版本">{{ log.service_version ?? '—' }}</el-descriptions-item>
         <el-descriptions-item label="工具">{{ log.tool_name ?? '—' }}</el-descriptions-item>
         <el-descriptions-item label="API Key ID">{{ log.api_key_id ?? '—' }}</el-descriptions-item>
         <el-descriptions-item label="Application ID">{{ log.application_id ?? '—' }}</el-descriptions-item>

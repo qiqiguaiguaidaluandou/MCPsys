@@ -15,7 +15,6 @@ class CallLogEntry:
     application_id: int | None
     user_id: int | None
     service_id: int
-    service_version: str | None
     tool_name: str | None
     request_id: str | None
     status: CallStatus

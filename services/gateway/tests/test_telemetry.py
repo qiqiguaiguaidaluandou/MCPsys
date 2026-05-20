@@ -14,7 +14,6 @@ def make_entry(service_id: int, status: CallStatus = CallStatus.success) -> Call
         application_id=2,
         user_id=None,
         service_id=service_id,
-        service_version=None,
         tool_name="echo",
         request_id="42",
         status=status,

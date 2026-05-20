@@ -385,7 +385,6 @@ onMounted(load);
           </el-table>
         </div>
       </el-tab-pane>
-      <el-tab-pane label="版本（v1）" name="versions" disabled />
     </el-tabs>
   </div>
 </template>
