@@ -46,13 +46,6 @@ const menu = computed<MenuItem[]>(() => [
       { key: 'audit', routeName: 'AuditEventList', icon: 'clipboard-list', labelKey: 'nav.audit' },
     ],
   },
-  {
-    key: 'upcoming-group', icon: 'sparkles', labelKey: 'nav.upcoming',
-    children: [
-      { key: 'permissions', icon: 'shield', labelKey: 'nav.permissions', disabled: true },
-      { key: 'config',      icon: 'sliders', labelKey: 'nav.config',      disabled: true },
-    ],
-  },
 ]);
 
 const visibleMenu = computed(() =>
