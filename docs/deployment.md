@@ -34,25 +34,16 @@ docker compose version
 
 ## 2. 把代码弄到这台服务器
 
-源仓库当前是本地 git 仓库（`/dataspace/kqspace/MCPsys/.git`），还没推过 remote。三种方式任选：
+代码已托管在 GitHub。最常用的是直接 clone（可持续 `git pull` 更新）；无 git 访问时用 rsync / tar 搬一次。
 
-### 方式 A：通过 git remote（推荐，可持续更新）
-
-在**源机器**上：
+### 方式 A：git clone（推荐）
 
 ```bash
-cd /dataspace/kqspace/MCPsys
-# 把仓库推到企业内的 GitLab / Gitea / GitHub Private
-git remote add origin git@gitlab.example.com:infra/mcpsys.git
-git push -u origin master
+git clone https://github.com/qiqiguaiguaidaluandou/MCPsys.git
+cd MCPsys
 ```
 
-在**目标服务器**上：
-
-```bash
-git clone git@gitlab.example.com:infra/mcpsys.git
-cd mcpsys
-```
+私有仓库 / 需要凭据时，先在目标服务器配好 SSH key 或 access token 再 clone。后续更新见 §10。
 
 ### 方式 B：rsync（无远端 git，快速搬一次）
 
@@ -363,19 +354,21 @@ docker compose logs <service-name> --tail=100
 - 鉴权：仪表盘只对登录用户可见；登录后从侧边栏「仪表盘」进入。viewer 可读聚合
   数据，不能看 call_logs 详情
 
-### 想把日志保留时间缩短
+### 调整日志保留时长
 
-MVP 没实现自动清理。手动方案：
+control-plane 内置保留 worker 会自动把超期调用日志的 body 置 NULL（metadata
+永久保留、行不删除），由 `.env` 控制：
+
+- `CALL_LOG_BODY_RETENTION_DAYS`（默认 30）：body 多少天后置 NULL
+- `RETENTION_INTERVAL_SECONDS`（默认 3600）：清理周期（秒）
+
+改完 `.env` 后 `docker compose up -d control-plane` 重建生效。
+
+如需进一步**删除整行**（连 metadata 也不留，超出默认策略），手动 SQL：
 
 ```sql
--- 删除 30 天前的调用日志
-DELETE FROM call_logs WHERE ts < now() - interval '30 days';
--- 仅清空 body 字段，保留元数据
-UPDATE call_logs SET request_body=NULL, response_body=NULL
-  WHERE ts < now() - interval '30 days';
+DELETE FROM call_logs WHERE ts < now() - interval '90 days';
 ```
-
-可以包成 cron 跑。
 
 ---
 
@@ -386,8 +379,9 @@ UPDATE call_logs SET request_body=NULL, response_body=NULL
 - **网关单实例**：`compose.yaml` 不再用 `deploy.replicas`，nginx 上游也是单条记录。50 个服务 / 100 QPS 以下完全够用，更大规模需要按 README "Operational notes" 改 nginx + 扩容。
 - **吊销/过期延迟最长 60 秒**：API Key 缓存 TTL。要立即生效就 `redis-cli FLUSHDB`。
 - **HTTP only**：本 nginx 监听 :80，期望 TLS 由企业边缘终结。如要本机做 TLS，给 `nginx/nginx.conf` 加 `listen 443 ssl;` 块和证书挂载。
-- **审计日志（管理动作 / 配置变更）尚未写入** `audit_events` 表 —— v1 范围。
-- **细粒度权限 / 限流 / 配置中心 / SSO** 都是 v1，按 spec §6 排期。
+- **细粒度权限（API Key 级 scope / per-tool）尚未实现**：当前授权是「应用 → 服务」白名单粒度。
+- **配置中心 / SSO** 尚未实现，属 v1 范围（按 spec §6 排期）。
+- **endpoint_url 无 SSRF deny-list**：仅做结构校验、信任 admin 角色；屏蔽 loopback / 内网网段是 v1 待办。
 
 ---
 
