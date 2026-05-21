@@ -90,7 +90,7 @@ def _post(client, url, headers, body, session_id=None):
     return client.post(url, headers=h, content=json.dumps(body).encode())
 
 
-def verify(base_url, slug, api_key, tool, tool_args, timeout) -> int:
+def verify(base_url, slug, api_key, tool, tool_args, timeout, verify_tls=True) -> int:
     url = f"{base_url.rstrip('/')}/mcp/{slug}"
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -98,7 +98,8 @@ def verify(base_url, slug, api_key, tool, tool_args, timeout) -> int:
         "Accept": "application/json, text/event-stream",
     }
 
-    with httpx.Client(timeout=timeout) as client:
+    # verify_tls: True=严格校验(默认)，False=跳过(--insecure)，或一个 CA 路径字符串(--ca)
+    with httpx.Client(timeout=timeout, verify=verify_tls) as client:
         # ── 第 1 层：网关链路 + initialize 握手 ────────────────────────────
         print(f"[1/3] 连接网关 + 鉴权 + 握手  →  POST {url} (initialize)")
         resp = _post(client, url, headers, {
@@ -163,19 +164,34 @@ def main() -> int:
     p.add_argument("--call", default=None, help="可选：要实际调用的工具名")
     p.add_argument("--args", default="{}", help="可选：工具参数 JSON 字符串")
     p.add_argument("--timeout", type=float, default=30.0)
+    p.add_argument("--insecure", action="store_true",
+                   help="跳过 TLS 证书校验（仅供临时调试！连接可被中间人窃听/篡改，API key 可能泄露，切勿用于生产）")
+    p.add_argument("--ca", default=None,
+                   help="指定受信任的 CA 证书/bundle 路径（内网自签名 CA 推荐用这个，而非 --insecure）")
     args = p.parse_args()
 
     if not args.base_url:
         p.error("缺少 --base-url（或环境变量 MCPSYS_BASE_URL）")
     if not args.api_key:
         p.error("缺少 --api-key（或环境变量 MCPSYS_API_KEY）")
+    if args.insecure and args.ca:
+        p.error("--insecure 与 --ca 不能同时使用")
     try:
         tool_args = json.loads(args.args)
     except json.JSONDecodeError as e:
         p.error(f"--args 不是合法 JSON: {e}")
 
+    if args.insecure:
+        verify_tls = False
+        print("⚠️  已禁用 TLS 证书校验（--insecure）：连接可被中间人窃听/篡改，API key 可能泄露。"
+              "仅限临时调试，切勿用于生产。\n", file=sys.stderr)
+    elif args.ca:
+        verify_tls = args.ca
+    else:
+        verify_tls = True
+
     try:
-        return verify(args.base_url, args.slug, args.api_key, args.call, tool_args, args.timeout)
+        return verify(args.base_url, args.slug, args.api_key, args.call, tool_args, args.timeout, verify_tls)
     except VerifyError as e:
         print(f"\n❌ 验证未通过：{e}", file=sys.stderr)
         return 1
