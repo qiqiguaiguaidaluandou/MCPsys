@@ -3,6 +3,7 @@ __pycache__/
 .venv/
 .env
 .env.local
+mcp-services/*/.env
 *.db
 *.sqlite
 .coverage

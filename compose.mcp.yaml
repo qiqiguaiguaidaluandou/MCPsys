@@ -1,0 +1,21 @@
+# MCP 服务编排（与 compose.yaml 合并使用，同属 project "mcpsys"）。
+#
+#   docker compose -f compose.yaml -f compose.mcp.yaml up -d
+#
+# 同一 project ⇒ 共享默认网络 mcpsys_default ⇒ gateway 可用服务名 mcp-<slug> 直连。
+# MCP 服务不暴露宿主端口，对外只有 nginx:8088。
+#
+# 阶段 1 先手写（仅 echo 一项）；阶段 2 起本文件由 scripts/sync_mcp_services.py --gen-compose 生成。
+name: mcpsys
+
+services:
+  mcp-echo:
+    build: ./mcp-services/echo
+    restart: unless-stopped
+    # echo 无 required_env，故不挂 env_file。
+    # 健康检查只验端口可连通（不掺和 MCP 协议细节）；MCPsys 的服务健康检查另在控制面做。
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8000), timeout=2)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
