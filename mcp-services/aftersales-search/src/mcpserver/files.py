@@ -12,7 +12,9 @@ from starlette.routing import Route
 
 from mcpserver import config
 
-DOWNLOAD_PREFIX = "/files"
+# 下载路由前缀。可经环境变量覆盖以做命名空间隔离（避免与前端 / 或多服务相互抢路径），
+# 例如 /mcp-files/aftersales-search —— 需与 nginx 对应 location 一致。
+DOWNLOAD_PREFIX = "/" + os.getenv("DOWNLOAD_PREFIX", "/files").strip("/")
 
 
 async def _download(request):
