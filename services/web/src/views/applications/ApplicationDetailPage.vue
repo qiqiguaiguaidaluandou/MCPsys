@@ -38,6 +38,37 @@ const saving = ref(false);
 
 const canEdit = computed(() => auth.hasRole('admin', 'operator'));
 
+// 编辑团队 / 描述
+const infoDialog = ref<{ visible: boolean; submitting: boolean; team: string; description: string }>({
+  visible: false,
+  submitting: false,
+  team: '',
+  description: '',
+});
+
+function openInfoEdit() {
+  if (!app.value) return;
+  infoDialog.value.team = app.value.team ?? '';
+  infoDialog.value.description = app.value.description ?? '';
+  infoDialog.value.visible = true;
+}
+
+async function saveInfo() {
+  if (!app.value) return;
+  infoDialog.value.submitting = true;
+  try {
+    const updated = await updateApplication(app.value.id, {
+      team: infoDialog.value.team.trim(),
+      description: infoDialog.value.description.trim(),
+    });
+    app.value = updated;
+    infoDialog.value.visible = false;
+    ElMessage.success('已保存');
+  } finally {
+    infoDialog.value.submitting = false;
+  }
+}
+
 function serviceById(id: number): McpService | undefined {
   return services.value.find((s) => s.id === id);
 }
@@ -158,7 +189,11 @@ onMounted(load);
   </el-button>
 
   <div v-if="app" v-loading="loading">
-    <PageHeader :title="app.name" :description="`团队：${app.team || '—'}`" />
+    <PageHeader :title="app.name" :description="`团队：${app.team || '—'}`">
+      <template v-if="canEdit" #actions>
+        <el-button @click="openInfoEdit">编辑信息</el-button>
+      </template>
+    </PageHeader>
 
     <div class="overview">
       <div class="overview__row">
@@ -294,6 +329,31 @@ onMounted(load);
         </el-table-column>
       </el-table>
     </div>
+
+    <el-dialog v-model="infoDialog.visible" title="编辑应用信息" width="480">
+      <el-form label-position="top">
+        <el-form-item label="团队">
+          <el-input
+            v-model="infoDialog.team"
+            maxlength="128"
+            show-word-limit
+            placeholder="可留空"
+          />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input
+            v-model="infoDialog.description"
+            type="textarea"
+            :rows="3"
+            placeholder="可留空"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="infoDialog.visible = false">取消</el-button>
+        <el-button type="primary" :loading="infoDialog.submitting" @click="saveInfo">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
