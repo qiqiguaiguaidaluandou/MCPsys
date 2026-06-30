@@ -222,6 +222,27 @@ def get_employee(emp_id: str) -> dict:
 
 模板的 `README.md` 会带一份「填 `.env` → 跑可达性检查 → `up -d`」的清单，新服务照着走即可。
 
+### 3.7 容器自注册（免脚本、免按钮 —— 重启即更新）
+
+目标：新增服务 / 改服务元数据后，**只要 `up -d --build` 起容器，它就自动登记到后台**，不用再跑注册脚本、也不用在界面点按钮。**不改 control-plane**，复用现有的 `/api/v1/auth/login` + `/api/v1/services`。
+
+> 注意区分：**加 tool 本来就无需任何注册**（MCPsys 注册的是服务 slug→endpoint，tool 由 `tools/list` 实时发现、调用日志按 `tool_name` 记账）。自注册只解决「新增服务 / 改服务元数据」这一类。
+
+机制（模板内置，每个服务镜像各带一份相同样板）：
+
+- `entrypoint.sh`：先跑 `register.py`（失败不阻塞），再 `exec` 起 MCP 服务。
+- `register.py`：读自己的 `service.yaml` → 推导内网 `endpoint_url`（`http://mcp-<slug>:<port><path>`）→ 用 `REGISTRAR_*` 账号登录 → `GET /services/<slug>` 不存在则 POST、存在则 PATCH（幂等 upsert）。带退避重试（control-plane 没就绪就重试），多次失败只告警、**绝不挡服务启动**；失败时打印 HTTP 状态码 + 返回体，直接在 `docker compose logs mcp-<slug>` 里能看到根因。
+
+依赖的一次性准备：
+
+- 建一个 **operator 角色**的自注册账号（不可用 admin，最小权限）：
+  ```bash
+  docker compose exec control-plane python /app/scripts/seed_user.py registrar '<密码>' operator
+  ```
+- 主 `.env` 配 `REGISTRAR_USER` / `REGISTRAR_PASSWORD`；`compose.mcp.yaml` 通过 `MCPSYS_URL` + `REGISTRAR_*` 注入到每个 MCP 容器。
+
+与 `sync_mcp_services.py` 的关系：自注册接管了「注册」这件事，所以同步脚本退化为**只生成 compose（`--gen-compose`）**；`--register` 保留为可选的批量补注册 / CI 用途，日常不需要。
+
 ## 4. 端到端调用链（不变，仅上游变内网）
 
 ```
