@@ -1,0 +1,18 @@
+slug: aftersales-search
+display_name: 售后/设备 SN 查询
+description: 按 SN 查询 CRM 售后工单、MES 实时工序、设备档案、FQC 出厂质检报告（由 ex/mcp 迁入）
+owner_team: platform
+tags: [crm, mes, device, fqc]
+port: 8000                       # 容器内监听端口（镜像固定 0.0.0.0:8000）
+path: /mcp                       # MCP streamable-http RPC 路径
+rate_limit_qps: null             # null=不限；上线建议配一个值
+required_env:                    # 对接公司接口必需的环境变量（值放同目录 .env）
+  - JWT_SECRET
+  - JWT_ISSUER
+  - LOGIN_USERNAME
+  - LOGIN_PASSWORD
+  - LOGIN_URL
+  - GETSN_URL
+  - SEARCH_SN_IN_SALES_POST_ORDER_URL
+  - GET_DEVICE_PROFILE_URL
+  - GET_FQC_REPORT_URL

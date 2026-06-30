@@ -1,9 +1,0 @@
-slug: echo
-display_name: Echo 测试服务
-description: 回显入参的最小 MCP 服务，用于打通 MCPsys 端到端链路
-owner_team: platform
-tags: [demo]
-port: 8000
-path: /mcp
-rate_limit_qps: null
-required_env: []                 # 不对接任何公司接口，无需密钥

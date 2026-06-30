@@ -43,12 +43,13 @@ mcp-services/
     service.yaml            # 服务清单（占位）
     .env.example
     README.md
-  echo/                     # 示例服务（阶段 1 产出，用于端到端打通）
+  aftersales-search/        # 由 ex/mcp 迁入的真实服务（CRM/MES/设备/FQC，按 SN 查）
     Dockerfile
     pyproject.toml
-    src/server.py
+    register.py / entrypoint.sh   # 自注册样板（从模板拷入）
     service.yaml
-    .env.example            # 该服务对接公司接口所需的环境变量样例（提交到 git）
+    src/mcpserver/...        # 业务源码
+    .env.example            # 对接公司接口所需的环境变量样例（提交到 git）
     .env                    # 真实密钥值（gitignore，不提交）
   <your-service>/
     ...
@@ -63,12 +64,12 @@ scripts/
 每个 MCP 服务目录下放一份清单，**编排和注册都从它派生**，杜绝「compose 里一个端口、后台又填另一个」的漂移：
 
 ```yaml
-# mcp-services/echo/service.yaml
-slug: echo                       # 唯一，小写连字符，2-64 字符（与 SLUG_RE 一致）
-display_name: Echo 测试服务
-description: 回显入参的最小 MCP 服务，用于打通链路
+# mcp-services/foo/service.yaml（示例占位）
+slug: foo                        # 唯一，小写连字符，2-64 字符（与 SLUG_RE 一致）
+display_name: Foo 服务
+description: 一句话描述这个服务
 owner_team: platform
-tags: [demo]
+tags: []
 port: 8000                       # 容器内监听端口（模板统一 8000）
 path: /mcp                       # MCP RPC 路径
 rate_limit_qps: null             # null=不限；上线建议配一个值
@@ -79,7 +80,7 @@ required_env:                    # 该服务对接公司接口需要的环境变
 
 派生规则：
 - 容器/服务名：`mcp-<slug>`
-- 注册的 `endpoint_url`：`http://mcp-<slug>:<port><path>`，例 `http://mcp-echo:8000/mcp`
+- 注册的 `endpoint_url`：`http://mcp-<slug>:<port><path>`，例 `http://mcp-foo:8000/mcp`
 
 ### 3.3 编排约定
 
@@ -93,10 +94,10 @@ required_env:                    # 该服务对接公司接口需要的环境变
 ```yaml
 name: mcpsys
 services:
-  mcp-echo:
-    build: ./mcp-services/echo
+  mcp-foo:
+    build: ./mcp-services/foo
     restart: unless-stopped
-    env_file: ./mcp-services/echo/.env   # 注入对接公司接口的密钥（service.yaml 有 required_env 时才加）
+    env_file: ./mcp-services/foo/.env   # 注入对接公司接口的密钥（service.yaml 有 required_env 时才加）
     # 无 ports：仅 mcpsys_default 内网可达
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,json; urllib.request.urlopen(urllib.request.Request('http://localhost:8000/mcp', data=b'{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}', headers={'content-type':'application/json'}))"]
@@ -246,10 +247,10 @@ def get_employee(emp_id: str) -> dict:
 ## 4. 端到端调用链（不变，仅上游变内网）
 
 ```
-Agent ──Bearer mcpk_…──▶ nginx:8088 ──▶ gateway /mcp/echo
+Agent ──Bearer mcpk_…──▶ nginx:8088 ──▶ gateway /mcp/<slug>
    ① 鉴权 apikey  ② resolve slug→endpoint  ③ 应用×服务白名单  ④ 限流  ⑤ 转发
                                                               │
-                                          http://mcp-echo:8000/mcp（内网）
+                                          http://mcp-<slug>:8000/mcp（内网）
                                                               │
                                                        ⑥ 异步写 call_logs
 ```
@@ -261,15 +262,15 @@ Agent ──Bearer mcpk_…──▶ nginx:8088 ──▶ gateway /mcp/echo
 **阶段 0 — 验证网络互通（~10 分钟）**
 - 临时起一个 busybox 加入 `mcpsys_default`，从 gateway 容器 `curl http://<name>:port` 确认服务名可达。产出：确认 `-f` 合并 + 同 project 网络方案成立。
 
-**阶段 1 — 模板 + echo 示例端到端打通**
-- 落地 `mcp-services/_template` 与 `mcp-services/echo`；
-- 手动写 `compose.mcp.yaml`（echo 一项）；
-- `up -d --build` → 后台注册 echo（endpoint `http://mcp-echo:8000/mcp`）→ 建应用授权 → 用 Key 经网关 `POST /mcp/echo` 调通 → 看到 `call_logs` 落库、健康检查变 healthy。
-- 验收：复用 smoke 思路跑一遍（可临时把 `smoke.sh` 的 `endpoint_url` 指到 `http://mcp-echo:8000/mcp` 验证内网链路）。
+**阶段 1 — 模板 + 自注册 + 迁入首个真实服务（已完成）**
+- 落地 `mcp-services/_template`（含 `register.py` / `entrypoint.sh` 自注册样板）；
+- 把 `ex/mcp` 迁入 `mcp-services/aftersales-search`，手写 `compose.mcp.yaml`；
+- `up -d --build` → 容器自注册到后台 → 建应用授权 → 用 Key 经网关 `POST /mcp/aftersales-search` 调通 → `call_logs` 落库、健康检查变 healthy。
+- （早期用过一个 throwaway 的 `echo` 示例打通链路，验证完已移除。）
 
 **阶段 2 — 脚本化**
-- `new_mcp_service.sh` + `sync_mcp_services.py`（`--gen-compose` / `--register` / `--dry-run`）；
-- 用脚本重新生成 echo 的 compose 片段与注册，确认与手写一致。
+- `new_mcp_service.sh` + `sync_mcp_services.py --gen-compose`（注册已由容器自注册接管，`--register` 仅留作 CI/批量补注册）；
+- 用脚本重新生成 compose 片段，确认与手写一致。
 
 **阶段 3 — 文档与封装**
 - `README.md` 增一节「新增一个 MCP 服务」（三步：`new_mcp_service.sh` → 写代码 → `sync_mcp_services.py && docker compose -f … up -d --build mcp-<slug>`）；
@@ -288,7 +289,7 @@ Agent ──Bearer mcpk_…──▶ nginx:8088 ──▶ gateway /mcp/echo
 
 ## 7. 风险与注意
 
-- **健康检查路径**：`endpoint_url` 必须是 MCP 的 RPC 路径（`/mcp`），不是 `/healthz`；探活发的是 `initialize`，SDK 默认会返回 200/4xx → 判定 healthy。实施时用 echo 实测确认。
+- **健康检查路径**：`endpoint_url` 必须是 MCP 的 RPC 路径（`/mcp`），不是 `/healthz`；探活发的是 `initialize`，SDK 默认会返回 200/4xx → 判定 healthy。已用迁入的 aftersales-search 实测确认。
 - **限流默认不限**：`rate_limit_qps` 默认 null，上线服务记得在 `service.yaml` 配置。
 - **project / 网络一致性**：两个 compose 文件必须落到同一 project（均 `name: mcpsys`）且用 `-f a -f b` 合并，否则不在同一网络、服务名不可达。
 - **资源隔离**：同机共栈，单个 MCP 服务 OOM/CPU 飙升可能影响邻居；阶段 3 可按需给容器加 `mem_limit` / `cpus`。

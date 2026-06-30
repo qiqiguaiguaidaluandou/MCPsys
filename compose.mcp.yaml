@@ -8,7 +8,7 @@
 # 容器自注册：每个 MCP 服务启动时由 entrypoint 跑 register.py，用 REGISTRAR_* 账号
 # 登录 control-plane 把自己 upsert 到后台 —— 重启即更新，无需任何脚本/按钮。
 #
-# 阶段 1 先手写（仅 echo 一项）；阶段 2 起本文件由 scripts/sync_mcp_services.py --gen-compose 生成。
+# 阶段 2 起本文件由 scripts/sync_mcp_services.py --gen-compose 生成。
 name: mcpsys
 
 x-mcp-env: &mcp-env
@@ -17,17 +17,24 @@ x-mcp-env: &mcp-env
   REGISTRAR_PASSWORD: ${REGISTRAR_PASSWORD}
 
 services:
-  mcp-echo:
-    build: ./mcp-services/echo
+  # 由 ex/mcp 迁入：按 SN 查 CRM 售后 / MES 工序 / 设备档案 / FQC 报告。
+  # 需先 cp mcp-services/aftersales-search/.env.example .env 并填密钥（否则 env_file 缺失会导致 up 失败）。
+  mcp-aftersales-search:
+    build: ./mcp-services/aftersales-search
     restart: unless-stopped
     environment:
       <<: *mcp-env
+    env_file: ./mcp-services/aftersales-search/.env
+    volumes:
+      - aftersales-fqc-reports:/data/fqc_reports
     depends_on:
       control-plane:
         condition: service_healthy
-    # 健康检查只验端口可连通（不掺和 MCP 协议细节）；MCPsys 的服务健康检查另在控制面做。
     healthcheck:
       test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8000), timeout=2)"]
       interval: 15s
       timeout: 5s
       retries: 3
+
+volumes:
+  aftersales-fqc-reports:
