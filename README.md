@@ -145,6 +145,107 @@ export PASSWORD='<你设置的管理员密码>'
 
 ---
 
+## 自建 MCP 服务托管（接入 / 新增 / 迁移）
+
+把自研 MCP 服务跑进 MCPsys 同一个 docker 工程，gateway 用内网服务名直连，对外仍只有 `8088`。
+鉴权、限流、调用日志、健康检查由 MCPsys 统一负责，MCP 服务里不用重复写。详见
+`docs/plans/2026-06-30-mcp-services-colocation-plan.md`。
+
+```
+mcp-services/
+  _template/          # 新服务的脚手架模板（含自注册样板）
+  aftersales-search/  # 已接入的真实服务（按 SN 查 CRM/MES/设备/FQC）
+compose.mcp.yaml      # MCP 服务编排，与 compose.yaml 合并使用
+```
+
+> **约定**：以后对 MCP 服务的 compose 操作都带两个 `-f`：
+> `docker compose -f compose.yaml -f compose.mcp.yaml <命令>`。
+> 二者同属 project `mcpsys`、共享内网 `mcpsys_default`，gateway 即可用 `http://mcp-<slug>:8000/mcp` 直连。
+
+### 工作原理：容器自注册
+
+每个 MCP 服务容器启动时，会自动读自己的 `service.yaml`、用 `REGISTRAR_*` 账号登录 control-plane，
+把自己登记/更新到后台（`register.py` + `entrypoint.sh`）。**重启即更新，无需任何脚本或按钮。**
+注意：注册的是「服务」（slug→内网地址），**新增/修改 tool 无需注册**，重建该服务容器即可。
+
+### 一次性准备：自注册账号
+
+1. `.env` 增加（密码自定，两处要一致）：
+   ```dotenv
+   REGISTRAR_USER=registrar
+   REGISTRAR_PASSWORD=<强密码>
+   ```
+2. 建一个 **operator 角色**的 `registrar` 账号，二选一：
+   - Web 后台「用户」→「新建用户」：用户名 `registrar`、角色「运维(operator)」、密码同上；
+   - 或命令行：`docker compose exec control-plane python /app/scripts/seed_user.py registrar '<强密码>' operator`
+
+### 日常命令
+
+```bash
+M="-f compose.yaml -f compose.mcp.yaml"   # 简写
+
+docker compose $M up -d --build mcp-<slug>   # 构建并起某个服务（其它容器不动）
+docker compose $M ps                         # 查看状态
+docker compose $M logs mcp-<slug> | grep '\[register\]'   # 看自注册结果
+docker compose $M restart mcp-<slug>         # 重启（会重新自注册）
+docker compose $M stop mcp-<slug>            # 临时停用
+docker compose $M start mcp-<slug>           # 恢复
+docker compose $M rm -f mcp-<slug>           # 删除容器
+```
+
+### 新增一个 MCP 服务（当前为手动流程，脚手架脚本规划于阶段 2）
+
+```bash
+# 1) 复制模板
+cp -r mcp-services/_template mcp-services/<slug>
+
+# 2) 改三处：
+#    - src/server.py：把 __SLUG__/__DISPLAY_NAME__ 换掉，写你的 @mcp.tool()（可多个）
+#    - service.yaml：填 slug / display_name / required_env（对接公司接口要的环境变量名）
+#    - cp .env.example .env，填真实密钥（.env 不进 git）
+
+# 3) 在 compose.mcp.yaml 的 services: 下加一段（仿 aftersales-search/模板片段）：
+#      mcp-<slug>:
+#        build: ./mcp-services/<slug>
+#        restart: unless-stopped
+#        environment: { <<: *mcp-env }
+#        env_file: ./mcp-services/<slug>/.env   # 有 required_env 才加
+#        depends_on: { control-plane: { condition: service_healthy } }
+#        healthcheck: ...（端口连通性）
+
+# 4) 起服务 → 自注册到后台
+docker compose -f compose.yaml -f compose.mcp.yaml up -d --build mcp-<slug>
+```
+
+完成后，在 Web 后台把该服务加进某个「应用」的服务白名单（默认拒绝），并给该应用签发 API Key。
+
+> 对接公司内部接口：模板已内置出站 `httpx` 客户端，密钥从环境变量读；出站默认跳过 TLS 证书校验
+> （`UPSTREAM_VERIFY_TLS=false`，适配自签证书）。详见模板 `README.md` 与方案文档 §3.6。
+
+### 启用 / 停用 / 删除 / 恢复
+
+| 想做的 | 操作 |
+|---|---|
+| 临时停用，以后再用 | `docker compose $M stop mcp-<slug>`；恢复用 `start` |
+| 删了后台又想重新用 | `docker compose $M restart mcp-<slug>`（自注册会重建为新记录） |
+| 永久下线 | 停/删容器 + 从 `compose.mcp.yaml` 移除 + 删 `mcp-services/<slug>` + 后台归档 |
+
+> ⚠️ 因为容器会自注册，**只在后台删除、但容器仍在跑**不是稳定的下线方式——容器一重启就会复活。
+> 要彻底下线，务必把容器也停掉/移除。
+
+### 客户端接入
+
+把客户端从原来的直连地址改为经网关、带 API Key：
+
+```
+URL:    http://<host>:8088/mcp/<slug>
+Header: Authorization: Bearer <API Key>
+```
+
+例如已接入的 `aftersales-search`：`http://<host>:8088/mcp/aftersales-search`。
+
+---
+
 ## 更新到新版本
 
 ```bash
