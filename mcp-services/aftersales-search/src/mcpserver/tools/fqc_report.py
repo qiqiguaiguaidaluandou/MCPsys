@@ -5,6 +5,8 @@
 
 接口返回的是 Base64 编码的报告文件（实际为 Excel）。本工具解码还原成原始文件
 并保存到服务器（config.FQC_REPORT_DIR），返回一个可下载的链接供用户获取文件。
+下载链接有时效（config.FQC_REPORT_TTL_HOURS，默认 2 小时），过期后失效并被清理，
+用户重新查询同一 SN 即可再次生成。
 """
 
 import base64
@@ -48,7 +50,8 @@ def register(mcp):
         Returns:
             字典，包含字段：
             - fileName (str): 报告原始文件名，如 "FQC.xlsx"。
-            - downloadUrl (str): 报告的下载链接，用户点击即可下载文件。
+            - downloadUrl (str): 报告的下载链接，用户点击即可下载文件。链接有时效
+              （默认 2 小时），过期后需重新查询该 SN 以生成新链接。
             若该 SN 不存在或无报告，返回空字典 {}。
         """
         return await _fetch_fqc_report(sn)

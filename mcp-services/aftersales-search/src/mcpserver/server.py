@@ -17,6 +17,7 @@ fqc_report.register(mcp)
 def main() -> None:
     app = mcp.streamable_http_app()
     files.register(app)
+    files.start_sweeper()  # 后台周期清扫过期报告，回收磁盘
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
