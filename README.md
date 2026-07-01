@@ -299,6 +299,7 @@ pnpm build        # 产线打包到 dist/
 
 ## 文档索引
 
+- **系统架构总览：`docs/architecture.md`**（组件职责 / 核心链路 / 数据模型 / 设计决策）
 - 系统设计与 v1 规划：`docs/specs/2026-04-30-mcp-management-system-design.md`
 - 前端设计：`docs/specs/2026-05-06-web-admin-design.md`
 - 完整部署 / 运维手册：`docs/deployment.md`
